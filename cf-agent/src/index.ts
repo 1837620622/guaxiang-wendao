@@ -2,10 +2,10 @@ import type { Env, AskResponse, Citation, AnswerPoint, Quote, SearchHit } from "
 import { retrieve, toCitations } from "./retrieve";
 import { buildPrompt, buildSystemPrompt } from "./prompt";
 import { MODELS, DEFAULT_MODEL, FALLBACK_CHAIN, isReasoning, providerOf } from "./models";
-import { providerReady, runExternal } from "./llm";
+import { runExternal } from "./llm";
 import { resolveLocation, findLocationInText, listCities, geoPromptBlock, nearestCity, geoFromCoords, resolveEnglishCity } from "./geo";
 import { webSearch, webPromptBlock, type WebResult } from "./websearch";
-import { analyzeImage, base64ToBytes, visionPromptBlock, MAX_BYTES, type VisionResult } from "./vision";
+import { analyzeImage, base64ToBytes, imageKind, visionPromptBlock, MAX_BYTES, type VisionResult } from "./vision";
 
 const ALLOWED_MODELS = new Set(MODELS.map((m) => m.id));
 
@@ -50,9 +50,9 @@ async function hashKey(s: string): Promise<string> {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40);
 }
 
-/** 简单滑动窗口限流（KV 计数） */
-async function rateLimit(env: Env, ip: string, kind: "ask" | "search"): Promise<{ ok: boolean; reason?: string }> {
-  if (!env.CACHE) return { ok: true };
+/** 简单滑动窗口限流（KV 计数）。计数失败时拒绝，避免限额失效后被打满。 */
+async function rateLimit(env: Env, ip: string, kind: "ask" | "search" | "feedback"): Promise<{ ok: boolean; reason?: string }> {
+  if (!env.CACHE) return { ok: false, reason: "rate_limit_unavailable" };
   const now = Date.now();
   const minute = Math.floor(now / 60000);
   const day = new Date(now + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -62,8 +62,8 @@ async function rateLimit(env: Env, ip: string, kind: "ask" | "search"): Promise<
     const [mRaw, dRaw] = await Promise.all([env.CACHE.get(mKey), env.CACHE.get(dKey)]);
     const mc = Number(mRaw || 0);
     const dc = Number(dRaw || 0);
-    const lim = kind === "ask" ? RATE.perMinute : RATE.searchPerMinute;
-    const dlim = kind === "ask" ? RATE.perDay : RATE.perDay * 4;
+    const lim = kind === "ask" ? RATE.perMinute : kind === "feedback" ? 20 : RATE.searchPerMinute;
+    const dlim = kind === "ask" ? RATE.perDay : kind === "feedback" ? 80 : RATE.perDay * 4;
     if (mc >= lim) return { ok: false, reason: "too_many_requests_per_minute" };
     if (dc >= dlim) return { ok: false, reason: "too_many_requests_per_day" };
     await Promise.all([
@@ -71,9 +71,30 @@ async function rateLimit(env: Env, ip: string, kind: "ask" | "search"): Promise<
       env.CACHE.put(dKey, String(dc + 1), { expirationTtl: 93600 }),
     ]);
     return { ok: true };
-  } catch {
-    return { ok: true }; // 限流故障时放行，不阻塞正常用户
+  } catch (e) {
+    console.error("rate limit failed", e);
+    return { ok: false, reason: "rate_limit_unavailable" };
   }
+}
+
+const MAX_JSON_BYTES = 6 * 1024 * 1024;
+
+/** 先看字节数再解析。不信 Content-Length 单独放行。 */
+async function readJsonLimited(request: Request, maxBytes: number): Promise<{ ok: true; body: any } | { ok: false; status: number; error: string }> {
+  const cl = Number(request.headers.get("content-length") || "");
+  if (Number.isFinite(cl) && cl > maxBytes) return { ok: false, status: 413, error: "payload_too_large" };
+  const buf = await request.arrayBuffer();
+  if (buf.byteLength > maxBytes) return { ok: false, status: 413, error: "payload_too_large" };
+  try {
+    return { ok: true, body: JSON.parse(new TextDecoder().decode(buf)) };
+  } catch {
+    return { ok: false, status: 400, error: "invalid_json" };
+  }
+}
+
+async function hashBytes(bytes: Uint8Array): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", bytes);
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40);
 }
 
 /** 从模型输出里抠出含 verdict 的 JSON 对象 */
@@ -319,26 +340,24 @@ function searchText(question: string, lang: "zh" | "en"): string {
 async function handleAsk(request: Request, env: Env, ip: string): Promise<Response> {
   const t0 = Date.now();
 
-  const cl = Number(request.headers.get("content-length") || 0);
-  if (cl > 6 * 1024 * 1024) return err("payload_too_large", 413);
+  const rl = await rateLimit(env, ip, "ask");
+  if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
 
-  let body: any;
-  try {
-    body = await request.json();
-  } catch {
-    return err("invalid_json", 400);
-  }
+  const packed = await readJsonLimited(request, MAX_JSON_BYTES);
+  if (!packed.ok) return err(packed.error, packed.status);
+  const body = packed.body;
   if (typeof body?.question !== "string") return err("question_required", 400);
   const question = body.question.trim();
   const hasImg = typeof (body as any)?.image === "string" && (body as any).image.length > 0;
   if (!question && !hasImg) return err("question_required", 400);
   if (question.length > 400) return err("question_too_long", 400);
+  const lang: "zh" | "en" = body?.lang === "en" ? "en" : "zh";
   if (!hasImg && (question.match(/[\u4e00-\u9fff]/g) || []).length < 2 && question.length < 4) {
-    return json({ error: "question_too_short", hint: "至少输入两个字，例如「财位」「厨房」「大门」" }, 400);
+    const hint = lang === "en"
+      ? "Type at least two words, for example kitchen, door, or bed."
+      : "至少输入两个字，例如「财位」「厨房」「大门」";
+    return json({ error: "question_too_short", hint }, 400);
   }
-
-  const rl = await rateLimit(env, ip, "ask");
-  if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
 
   let topK = 6;
   if (body?.topK !== undefined) {
@@ -349,13 +368,16 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
   // 图片
   let vision: VisionResult | null = null;
   const imgRaw = typeof body?.image === "string" ? body.image : "";
+  let imageBytes: Uint8Array | null = null;
   if (imgRaw) {
     const bytes = base64ToBytes(imgRaw);
     if (!bytes) return err("bad_image", 400);
     if (bytes.length > MAX_BYTES) return err("image_too_large", 413);
+    if (!imageKind(bytes)) return err("bad_image", 400);
+    imageBytes = bytes;
 
-    // 同一张图 + 同一个 hint 复用识别结果，避免重复烧视觉模型算力
-    const imgKey = `vis:v1:${await hashKey(imgRaw.slice(-800) + "|" + question.slice(0, 40))}`;
+    // 整图哈希，避免头尾相同、中间不同的图共用一条识别
+    const imgKey = `vis:v2:${await hashBytes(bytes)}:${await hashKey(question.slice(0, 80))}`;
     if (env.CACHE) {
       try {
         const cached = await env.CACHE.get(imgKey, "json");
@@ -370,7 +392,7 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
         }
       } catch (e: any) {
         console.error("vision failed", e);
-        vision = { ok: false, text: "", model: "", ms: 0, error: String(e?.message ?? e) };
+        vision = { ok: false, text: "", model: "", ms: 0, error: "vision_failed" };
       }
     }
   }
@@ -378,7 +400,6 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
   // 地理位置：显式传参优先，其次从问题文本里找城市名
   const explicitLoc = typeof body?.location === "string" ? body.location.trim().slice(0, 40) : "";
   const geo = explicitLoc ? resolveLocation(explicitLoc) : findLocationInText(question);
-  const lang: "zh" | "en" = body?.lang === "en" ? "en" : "zh";
   const facingRaw = Number(body?.facing);
   const facing = Number.isFinite(facingRaw) && facingRaw >= 0 && facingRaw < 360 ? Math.round(facingRaw) : null;
 
@@ -386,14 +407,19 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
   const reqModel = typeof body?.model === "string" && ALLOWED_MODELS.has(body.model) ? body.model : "";
   const primary = reqModel || env.MODEL || DEFAULT_MODEL;
 
-  // 缓存键带上模型、历史正文和图片指纹，避免换图或换上下文撞上一条答案
+  // 先截断再算指纹，超大 history 不能靠原样拼接耗掉内存
+  const history = Array.isArray(body?.history)
+    ? body.history
+        .slice(-3)
+        .map((h: any) => ({ q: cleanText(h?.q, 120), a: cleanText(h?.a, 280) }))
+        .filter((h: any) => h.q && h.a)
+    : [];
   const fp = await hashKey(question);
-  const historyArr = Array.isArray(body?.history) ? body.history : [];
-  const histFp = historyArr.length
-    ? await hashKey(historyArr.map((h: any) => `${h?.q ?? ""}|${h?.a ?? ""}`).join("\n"))
+  const histFp = history.length
+    ? await hashKey(history.map((h: { q: string; a: string }) => `${h.q}|${h.a}`).join("\n"))
     : "-";
-  const imgFp = imgRaw ? await hashKey(imgRaw.slice(0, 240) + "|" + imgRaw.slice(-800)) : "-";
-  const cacheKey = `v28:ask:${lang}:${primary}:${topK}:${geo ? geo.name : "-"}:${facing ?? "-"}:${fp}:${histFp}:${imgFp}`;
+  const imgFp = imageBytes ? await hashBytes(imageBytes) : "-";
+  const cacheKey = `v29:ask:${lang}:${primary}:${topK}:${geo ? geo.name : "-"}:${facing ?? "-"}:${fp}:${histFp}:${imgFp}`;
   if (env.CACHE) {
     try {
       const hit: any = await env.CACHE.get(cacheKey, "json");
@@ -437,13 +463,6 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
 
   // 书里没翻到也继续问模型，让它写明「书中无据」后再补日常做法
   const cites = toCitations(hits);
-
-  const history = Array.isArray(body?.history)
-    ? body.history
-        .slice(-3)
-        .map((h: any) => ({ q: cleanText(h?.q, 120), a: cleanText(h?.a, 280) }))
-        .filter((h: any) => h.q && h.a)
-    : [];
 
   let geoBlock = geo ? geoPromptBlock(geo) : "";
   if (facing !== null) {
@@ -491,7 +510,7 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
   }
 
   const geoOut = geo
-    ? { name: geo.name, lat: geo.lat, lon: geo.lon, trueSolarOffsetMin: geo.trueSolarOffsetMin, declination: geo.declination }
+    ? { name: geo.name, trueSolarOffsetMin: geo.trueSolarOffsetMin, declination: geo.declination }
     : undefined;
   const chapters = new Set(cites.map((c) => c.ch));
 
@@ -730,7 +749,7 @@ async function handleSearch(request: Request, env: Env, ip: string): Promise<Res
 
 /** health 结果缓存 5 分钟，避免 COUNT(*) 全表扫被刷 */
 async function handleHealth(env: Env): Promise<Response> {
-  const key = "health:v2";
+  const key = "health:v3";
   if (env.CACHE) {
     try {
       const cached = await env.CACHE.get(key, "json");
@@ -746,7 +765,6 @@ async function handleHealth(env: Env): Promise<Response> {
       ...(results?.[0] ?? {}),
       model: env.MODEL,
       models: MODELS.map((m) => m.id),
-      providers: providerReady(env),
     };
     if (env.CACHE) {
       try { await env.CACHE.put(key, JSON.stringify(data), { expirationTtl: 300 }); } catch {}
@@ -815,25 +833,22 @@ async function handleChapter(env: Env, url: URL): Promise<Response> {
 
 
 /* ===== 反馈 & 统计 ===== */
-async function handleFeedback(request: Request, env: Env): Promise<Response> {
-  let body: any;
-  try { body = await request.json(); } catch { return err("invalid_json", 400); }
+async function handleFeedback(request: Request, env: Env, ip: string): Promise<Response> {
+  const rl = await rateLimit(env, ip, "feedback");
+  if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
+  const packed = await readJsonLimited(request, 4096);
+  if (!packed.ok) return err(packed.error, packed.status);
+  const body = packed.body;
   const q = cleanText(body?.question, 120);
   const v = body?.vote === "up" ? "up" : body?.vote === "down" ? "down" : "";
-  const verdict = cleanText(body?.verdict, 10);
   if (!q || !v) return err("bad_feedback", 400);
   if (!env.CACHE) return json({ ok: false, reason: "no_cache" });
 
   const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   try {
-    // 1) 累计计数
     const counterKey = `fb:${v}:${day}`;
     const cur = Number((await env.CACHE.get(counterKey)) || 0);
     await env.CACHE.put(counterKey, String(cur + 1), { expirationTtl: 90 * 86400 });
-
-    // 2) 问题热度（用于发现检索差的问题）
-    const qKey = `q:${v}:${await hashKey(q)}`;
-    await env.CACHE.put(qKey, JSON.stringify({ q, v, verdict, day, at: Date.now() }), { expirationTtl: 90 * 86400 });
   } catch (e) {
     console.error("feedback failed", e);
   }
@@ -842,22 +857,17 @@ async function handleFeedback(request: Request, env: Env): Promise<Response> {
 
 async function handleStats(env: Env): Promise<Response> {
   if (!env.CACHE) return json({ ok: false });
-  const key = "stats:v1";
+  const key = "stats:v2";
   try {
     const cached = await env.CACHE.get(key, "json");
     if (cached) return json({ ...(cached as any), cached: true });
   } catch {}
 
   const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
-  const out: any = { day, up: 0, down: 0, recent: [] as any[] };
+  const out = { day, up: 0, down: 0 };
   try {
     out.up = Number((await env.CACHE.get(`fb:up:${day}`)) || 0);
     out.down = Number((await env.CACHE.get(`fb:down:${day}`)) || 0);
-    const list = await env.CACHE.list({ prefix: "q:", limit: 50 });
-    for (const k of list.keys.slice(0, 20)) {
-      const v = await env.CACHE.get(k.name, "json");
-      if (v) out.recent.push(v);
-    }
   } catch (e) {
     console.error("stats failed", e);
   }
@@ -878,8 +888,6 @@ function whereFromEdge(request: Request, url: URL) {
   const cfLon = Number(cf.longitude);
   const cfCity = String(cf.city || "");
   const region = String(cf.region || "");
-  const country = String(cf.country || "");
-  const timezone = String(cf.timezone || "");
 
   let how: "gps" | "ip" | "none" = "none";
   let g = null as ReturnType<typeof resolveLocation>;
@@ -896,11 +904,10 @@ function whereFromEdge(request: Request, url: URL) {
 
   return {
     how,
-    country,
-    region,
-    timezone,
     city: g?.name || "",
-    geo: g,
+    geo: g
+      ? { name: g.name, trueSolarOffsetMin: g.trueSolarOffsetMin, declination: g.declination }
+      : null,
   };
 }
 
@@ -917,22 +924,23 @@ export default {
     if (url.pathname === "/api/search" && request.method === "GET") return handleSearch(request, env, ip);
     if (url.pathname === "/api/health") return handleHealth(env);
     if (url.pathname === "/api/models") {
-      return json({ default: env.MODEL || DEFAULT_MODEL, models: MODELS, providers: providerReady(env) });
+      return json({ default: env.MODEL || DEFAULT_MODEL, models: MODELS });
     }
     if (url.pathname === "/api/vision" && request.method === "POST") {
       const rl = await rateLimit(env, ip, "ask");
       if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
-      let vb: any;
-      try { vb = await request.json(); } catch { return err("invalid_json", 400); }
-      const raw = typeof vb?.image === "string" ? vb.image : "";
+      const packed = await readJsonLimited(request, MAX_JSON_BYTES);
+      if (!packed.ok) return err(packed.error, packed.status);
+      const raw = typeof packed.body?.image === "string" ? packed.body.image : "";
       if (!raw) return err("image_required", 400);
       const bytes = base64ToBytes(raw);
       if (!bytes) return err("bad_image", 400);
       if (bytes.length > MAX_BYTES) return err("image_too_large", 413);
-      const r = await analyzeImage(env, bytes, String(vb?.hint ?? "").slice(0, 100));
-      return json(r);
+      if (!imageKind(bytes)) return err("bad_image", 400);
+      const r = await analyzeImage(env, bytes, String(packed.body?.hint ?? "").slice(0, 100));
+      return json({ ok: r.ok, text: r.ok ? r.text : "", model: r.model, ms: r.ms, error: r.ok ? undefined : "vision_failed" });
     }
-    if (url.pathname === "/api/feedback" && request.method === "POST") return handleFeedback(request, env);
+    if (url.pathname === "/api/feedback" && request.method === "POST") return handleFeedback(request, env, ip);
     if (url.pathname === "/api/stats") return handleStats(env);
     if (url.pathname === "/api/toc") return handleToc(env);
     if (url.pathname === "/api/chapter") return handleChapter(env, url);

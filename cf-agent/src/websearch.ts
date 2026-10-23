@@ -14,22 +14,35 @@ export interface WebResult {
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
-/** 编码安全抓取 */
+/** 编码安全抓取。只跟着留在最初那个主机上的跳转，不跟着搜到的外链走。 */
 export async function fetchTextSafe(url: string, timeoutMs = 6000): Promise<string> {
+  const first = new URL(url);
+  if (first.protocol !== "https:") throw new Error("search_host");
+  let current = first;
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
-    const res = await fetch(url, {
-      headers: {
-        "User-Agent": UA,
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-      },
-      signal: ctrl.signal,
-      redirect: "follow",
-    });
-    const buf = await res.arrayBuffer();
-    return decodeBuffer(buf, res.headers.get("content-type") || "");
+    for (let hop = 0; hop < 3; hop++) {
+      if (current.hostname !== first.hostname) throw new Error("search_host");
+      const res = await fetch(current.href, {
+        headers: {
+          "User-Agent": UA,
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
+        },
+        signal: ctrl.signal,
+        redirect: "manual",
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const loc = res.headers.get("location");
+        if (!loc) throw new Error("search_redirect");
+        current = new URL(loc, current);
+        continue;
+      }
+      const buf = await res.arrayBuffer();
+      return decodeBuffer(buf, res.headers.get("content-type") || "");
+    }
+    throw new Error("search_redirect");
   } finally {
     clearTimeout(timer);
   }

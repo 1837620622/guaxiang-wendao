@@ -23,6 +23,22 @@ export const OK_MIME = new Set([
 
 export const MAX_BYTES = 4 * 1024 * 1024; // 4MB
 
+/** 只认 JPEG / PNG / WebP 文件头，不信 MIME 声明。 */
+export function imageKind(bytes: Uint8Array): "jpeg" | "png" | "webp" | null {
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "jpeg";
+  if (
+    bytes.length >= 8 &&
+    bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+    bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+  ) return "png";
+  if (
+    bytes.length >= 12 &&
+    bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+    bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+  ) return "webp";
+  return null;
+}
+
 /** 从 dataURL 或纯 base64 里取出字节 */
 export function base64ToBytes(input: string): Uint8Array | null {
   let s = input.trim();
@@ -104,7 +120,7 @@ export async function analyzeImage(
       lastErr = String(e?.message ?? e);
     }
   }
-  return { ok: false, text: "", model: "", ms: Date.now() - t0, error: lastErr };
+  return { ok: false, text: "", model: "", ms: Date.now() - t0, error: lastErr === "vision_timeout" ? "vision_timeout" : "vision_failed" };
 }
 
 /** 图片分析结果 → 提示词块 */

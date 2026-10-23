@@ -84,8 +84,6 @@ export interface AskResponse {
   raw?: string;
   geo?: {
     name: string;
-    lat: number;
-    lon: number;
     trueSolarOffsetMin: number;
     declination: number;
   };

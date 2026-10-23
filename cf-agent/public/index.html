@@ -402,8 +402,8 @@
     min-height:44px;padding:8px 10px;text-align:left;
     border:1px solid var(--ink);background:var(--paper);font-size:13px;line-height:1.4;
   }
-  .card-rest{opacity:0;transform:translateY(8px)}
-  .card-rest.in{opacity:1;transform:none;transition:opacity .45s ease, transform .5s cubic-bezier(.16,.8,.2,1)}
+  .card-rest{display:none}
+  .card-rest.in{display:block;animation:rise .45s ease both}
   .card-rest.in .dailybox{animation:rise .45s ease .08s both}
   .card-rest.in .quotes{animation:rise .45s ease .16s both}
   .asks{animation:rise .32s ease both}
@@ -500,7 +500,7 @@
   }
   @media (prefers-reduced-motion:reduce){
     .msg,.caret,.gate,.gate-result,#gateEnter,#gateAsk,.card-rest,.card-rest.in .dailybox,.card-rest.in .quotes,.asks,#side{animation:none!important;transition:none!important}
-    .card-rest{opacity:1;transform:none}
+    .card-rest.in{display:block;animation:none}
   }
 </style>
 </head>
@@ -703,6 +703,13 @@ const GUA_Q = {
 };
 
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function chapNo(n){
+  const x=Number(n);
+  return Number.isInteger(x)&&x>0&&x<100000?String(x):'';
+}
+function safeImg(u){
+  return typeof u==='string' && /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(u) ? u : '';
+}
 const el=h=>{const d=document.createElement('div');d.innerHTML=h.trim();return d.firstElementChild};
 const scrollBottom=()=>requestAnimationFrame(()=>{main.scrollTop=main.scrollHeight});
 function syncTalk(){
@@ -1170,7 +1177,8 @@ window.addEventListener('paste',e=>{
 
 /* ===== 消息 ===== */
 function addUser(t, img){
-  const thumb = img ? '<img src="'+img.dataUrl+'" alt="上传的图片" style="max-width:100%;display:block;margin-bottom:8px;border:1px solid #cbbfa6">' : '';
+  const src = img ? safeImg(img.dataUrl) : '';
+  const thumb = src ? '<img src="'+src+'" alt="上传的图片" style="max-width:100%;display:block;margin-bottom:8px;border:1px solid #cbbfa6">' : '';
   chat.appendChild(el('<div class="msg user"><div class="avatar">我</div><div class="body"><div class="bubble">'+thumb+esc(t)+'</div></div></div>'));
   syncTalk();
   scrollBottom();
@@ -1237,20 +1245,24 @@ function addBot(d){
   const quotes=(d.quotes||[]).map(qq=>{
     const c=(d.citations||[]).find(x=>x.n===qq.ref)||{};
     const title=(c.title||'').replace(/^第\d+[章篇]?\s*/,'');
+    const ch=chapNo(c.ch), p0=chapNo(c.p0), p1=chapNo(c.p1);
     const where=LANG==='en'
-      ? 'Ch. '+(c.ch??'?')+' · ¶ '+(c.p0??'?')+'–'+(c.p1??'?')
-      : '第 '+(c.ch??'?')+' 章 · 第 '+(c.p0??'?')+'–'+(c.p1??'?')+' 段';
+      ? 'Ch. '+(ch||'?')+' · ¶ '+(p0||'?')+'–'+(p1||'?')
+      : '第 '+(ch||'?')+' 章 · 第 '+(p0||'?')+'–'+(p1||'?')+' 段';
     const open=qq.verified && !opened ? (opened=true,' open') : '';
-    return '<details class="q" id="q-'+qq.ref+'"'+open+'><summary><span class="qno">['+qq.ref+']</span><span class="qmeta"><span class="t">'+esc(title||t('quotes'))+'</span><span class="p">'+esc(where)+'</span></span>'+(c.ch?'<a class="open-orig" href="/read?ch='+c.ch+(c.p0?'&p='+c.p0:'')+'" target="_blank" rel="noopener">'+esc(t('open'))+'</a>':'')+'<span class="chev">▶</span></summary><div class="qtext">'+esc(qq.quote)+'<span class="verify '+(qq.verified?'ok':'bad')+'">'+esc(qq.verified?t('checked'):t('unchecked'))+'</span></div></details>';
+    const openLink=ch?'<a class="open-orig" href="/read?ch='+ch+(p0?'&p='+p0:'')+'" target="_blank" rel="noopener">'+esc(t('open'))+'</a>':'';
+    return '<details class="q" id="q-'+esc(qq.ref)+'"'+open+'><summary><span class="qno">['+esc(qq.ref)+']</span><span class="qmeta"><span class="t">'+esc(title||t('quotes'))+'</span><span class="p">'+esc(where)+'</span></span><span class="chev">▶</span></summary><div class="qtext">'+esc(qq.quote)+'<span class="verify '+(qq.verified?'ok':'bad')+'">'+esc(qq.verified?t('checked'):t('unchecked'))+'</span>'+(openLink?'<div class="more">'+openLink+'</div>':'')+'</div></details>';
   }).join('');
   const links=[];
   const seen=new Set();
   for(const qq of (d.quotes||[])){
     const c=(d.citations||[]).find(x=>x.n===qq.ref);
-    if(!c||seen.has(c.ch)) continue;
-    seen.add(c.ch);
+    const ch=c&&chapNo(c.ch);
+    if(!ch||seen.has(ch)) continue;
+    seen.add(ch);
+    const p0=chapNo(c.p0);
     const title=(c.title||'').replace(/^第\d+[章篇]?\s*/,'').slice(0,12);
-    links.push('<a href="/read?ch='+c.ch+(c.p0?'&p='+c.p0:'')+'" target="_blank" rel="noopener">'+(LANG==='en'?'Ch. ':'第')+c.ch+(LANG==='en'?' ':'章 ')+esc(title)+'</a>');
+    links.push('<a href="/read?ch='+ch+(p0?'&p='+p0:'')+'" target="_blank" rel="noopener">'+(LANG==='en'?'Ch. ':'第')+ch+(LANG==='en'?' ':'章 ')+esc(title)+'</a>');
   }
   const web=(d.web||[]).map(w=>{
     const href=safeHref(w.url);
@@ -1265,7 +1277,7 @@ function addBot(d){
   const tag=(LANG==='en'?'Passages ':'已核对 ')+citeN+(d.cached?(LANG==='en'?' · cached':' · 缓存'):'');
   const node=el('<div class="msg bot"><div class="avatar">卦</div><div class="body"><div class="card"><div class="card-head"><span class="badge '+badgeCls(d.verdict)+'" data-v="'+esc(d.verdict||'')+'">'+esc(t('v_'+(d.verdict||''))||d.verdict||'—')+'</span><span class="tag">'+esc(tag)+'</span><span class="spacer"></span><button class="copybtn" type="button">'+esc(t('copy'))+'</button></div><div class="conclusion"><span class="q">「</span><span class="cw"></span><span class="q">」</span><span class="caret"></span></div><div class="card-rest">'+(d.sourceNote?'<div class="note">'+esc(d.sourceNote)+'</div>':'')+pointBlock(book,t('sec_book'))+pointBlock(weak,t('sec_weak'))+pointBlock(webPts,t('sec_web'))+(web?'<div class="quotes"><div class="quotes-title">'+esc(t('sec_web'))+'</div>'+web+'</div>':'')+(d.vision&&d.vision.ok?'<div class="visionbox"><div class="vt">'+esc(t('seen'))+'</div>'+esc(d.vision.text)+'</div>':'')+(d.vision&&!d.vision.ok?'<div class="missing"><b>'+esc(t('nosee'))+'</b>'+esc(d.vision.error||'')+'</div>':'')+(d.missing?'<div class="missing"><b>'+esc(t('miss'))+'</b>'+esc(d.missing)+'</div>':'')+dailyHtml+(quotes?'<div class="quotes"><div class="quotes-title">'+esc(t('quotes'))+'</div>'+quotes+'</div>':'')+(links.length>1?'<div class="more"><span class="lab">'+esc(t('more'))+'</span>'+links.slice(0,5).join('')+'</div>':'')+(follows?'<div class="quotes-title">'+esc(t('next'))+'</div><div class="follows">'+follows+'</div>':'')+'<div class="meta"><span>'+esc(shortModel(d.model))+(geoTxt?' · '+esc(geoTxt):'')+'</span><span class="sp"></span><button class="fb" type="button" data-vote="up">'+esc(t('useful'))+'</button><button class="fb down" type="button" data-vote="down">'+esc(t('useless'))+'</button><span>'+(d.elapsedMs||0)+' ms</span></div></div></div></div></div>');
   const rest=node.querySelector('.card-rest');
-  const showRest=()=>{ if(rest) rest.classList.add('in'); scrollBottom(); };
+  const showRest=()=>{ if(rest) rest.classList.add('in'); };
   const cw=node.querySelector('.cw');
   typeWriter(cw, d.conclusion||'', ()=>{
     const caret=node.querySelector('.caret');
@@ -1310,7 +1322,8 @@ function addBot(d){
   });
   chat.appendChild(node);
   syncTalk();
-  scrollBottom();
+  const head=node.querySelector('.card-head')||node;
+  head.scrollIntoView({block:'start'});
 }
 
 async function ask(text, shown){
