@@ -1,0 +1,20 @@
+{
+  "name": "guaxiang-wendao",
+  "version": "1.0.0",
+  "private": true,
+  "description": "《改命记实录》风水问答（Cloudflare Workers + D1 + Workers AI）",
+  "scripts": {
+    "build:db": "python3 scripts/build_chapters.py",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:create": "wrangler d1 create guaxiang",
+    "db:init": "bash import.sh",
+    "db:init:local": "wrangler d1 execute guaxiang --local --file=./data/chapters.sql --yes",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250109.0",
+    "typescript": "^5.7.2",
+    "wrangler": "^3.101.0"
+  }
+}

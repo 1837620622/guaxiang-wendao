@@ -1,0 +1,8 @@
+node_modules/
+.wrangler/
+import.log
+import_progress.log
+*.log
+.DS_Store
+data/sql/
+data/chunks.jsonl

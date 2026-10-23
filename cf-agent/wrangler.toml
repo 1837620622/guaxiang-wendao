@@ -1,0 +1,40 @@
+name = "guaxiang-wendao"
+main = "src/index.ts"
+compatibility_date = "2025-01-01"
+workers_dev = true
+
+# 域名路由（复用已有 DNS 记录，不做 Custom Domain，避免和现有记录冲突）
+routes = [
+  { pattern = "chuankangkk.top/*", zone_name = "chuankangkk.top" },
+  { pattern = "www.chuankangkk.top/*", zone_name = "chuankangkk.top" },
+]
+
+
+# 前端静态页
+[assets]
+directory = "./public"
+binding = "ASSETS"
+
+# D1 数据库（先 wrangler d1 create guaxiang，再把 id 填进来）
+[[d1_databases]]
+binding = "DB"
+database_name = "guaxiang"
+database_id = "0b26298a-40f9-4c1c-9d26-08685ca1dd5b"
+
+# Workers AI
+[ai]
+binding = "AI"
+
+# KV 答案缓存（省 AI 算力）
+[[kv_namespaces]]
+binding = "CACHE"
+id = "5126e810b03f4c279a61c02ea270e578"
+
+[vars]
+MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+FALLBACK_MODEL = "@cf/zai-org/glm-4.7-flash"
+BOOK_TITLE = "改命记实录"
+BOOK_AUTHOR = "道之光"
+
+[observability]
+enabled = true

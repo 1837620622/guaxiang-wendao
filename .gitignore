@@ -1,0 +1,18 @@
+# 依赖
+node_modules/
+.wrangler/
+
+# 数据（体积大，本地留存；部署时由 scripts/build_chapters.py 生成）
+data/
+output/
+cf-agent/data/
+
+# 日志与缓存
+*.log
+.DS_Store
+__pycache__/
+*.pyc
+
+# 编辑器
+.idea/
+.vscode/
