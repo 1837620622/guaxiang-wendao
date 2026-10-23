@@ -32,6 +32,7 @@
     background-size:100% 32px;
     font-family:"Songti SC","STSong","Songti TC","Noto Serif SC","Source Han Serif SC","PingFang SC",serif;
     display:flex;flex-direction:column;
+    position:fixed;left:0;right:0;top:var(--vvtop,0px);
     height:var(--vvh, 100dvh);
     overflow:hidden;
   }
@@ -161,7 +162,8 @@
   .typing{font-size:14px;letter-spacing:.2em;color:var(--ink2)}
 
   footer{
-    flex:none;z-index:30;border-top:1px solid var(--ink);
+    grid-column:2;grid-row:2;
+    z-index:30;border-top:1px solid var(--ink);
     background:var(--paper2);
     padding:8px 12px calc(8px + env(safe-area-inset-bottom));
   }
@@ -228,6 +230,7 @@
   .hint{
     margin-top:6px;font-size:11px;color:var(--ink2);letter-spacing:.04em;
     font-family:"PingFang SC",sans-serif;
+    white-space:normal;overflow-wrap:anywhere;
   }
 
   .sheet{
@@ -322,10 +325,16 @@
     transition:opacity .4s ease .05s, transform .4s ease .05s;
   }
 
-  .shell{flex:1;display:flex;min-height:0}
-  .col{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}
+  .shell{
+    flex:1;min-height:0;
+    display:grid;
+    grid-template-columns:300px minmax(0,1fr);
+    grid-template-rows:minmax(0,1fr) auto;
+  }
+  .col{grid-column:2;grid-row:1;min-width:0;min-height:0;display:flex;flex-direction:column}
   #side{
-    width:300px;flex:none;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    grid-column:1;grid-row:1 / span 2;
+    min-width:0;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
     border-right:1px solid var(--ink);background:var(--paper2);
     padding:12px 12px 20px;
   }
@@ -353,12 +362,17 @@
   .pan[hidden]{display:none}
   .pan span{letter-spacing:.06em}
   .pan button{margin-left:auto;min-height:36px;padding:0 10px;border:1px solid var(--ink);background:var(--paper2)}
-  .dirs{display:flex;overflow-x:auto;border:1px solid var(--ink);margin-bottom:8px;-webkit-overflow-scrolling:touch}
+  .dirs{
+    display:grid;grid-template-columns:repeat(4,1fr);
+    border:1px solid var(--ink);margin-bottom:8px;
+  }
   .dirs button{
-    flex:1 0 64px;min-height:48px;border:0;border-right:1px solid var(--line);
+    min-height:52px;border:0;
+    border-right:1px solid var(--line);border-bottom:1px solid var(--line);
     background:var(--paper);font-size:15px;line-height:1.15;
   }
-  .dirs button:last-child{border-right:0}
+  .dirs button:nth-child(4n){border-right:0}
+  .dirs button:nth-child(n+5){border-bottom:0}
   .dirs small{display:block;color:var(--ink2);font-size:11px;font-family:"PingFang SC",sans-serif;letter-spacing:0}
   .dirs button:active,.asks button:active{background:#e7dcc4}
   #side .board{margin-bottom:8px}
@@ -396,57 +410,85 @@
 
   #sitAsk{margin-top:8px;min-height:44px;width:100%;border:1px solid var(--ink);background:var(--paper)}
   #sitAsk[hidden]{display:none}
+  .lead{display:none}
   #geoNote:empty,#sitNote:empty{display:none}
 
   @media (max-width:860px){
-    .shell{flex-direction:column}
+    .shell{display:flex;flex-direction:column}
     #side{
-      position:relative;top:auto;right:auto;bottom:auto;left:auto;
-      width:100%;transform:none;z-index:1;
-      flex:1;min-height:0;max-height:none;overflow-y:auto;
+      grid-column:auto;grid-row:auto;
+      width:100%;
+      flex:1;min-height:0;max-height:none;overflow:hidden;
       display:flex;flex-direction:column;
-      border-right:0;border-bottom:1px solid var(--ink);
-      padding:8px 10px 10px;background:var(--paper2);
+      border-right:0;border-bottom:0;
+      padding:8px 10px 6px;
     }
-    .dirs{flex:1;min-height:148px;grid-template-rows:1fr 1fr}
-    .col{flex:none}
-    main{max-height:96px}
-    #geoNote:not(:empty){
+    footer{grid-column:auto;grid-row:auto}
+    .col{display:none}
+    #geoNote:not(:empty),#sitNote:not(:empty){
       display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+      flex:none;
     }
-    body.has-talk #side{flex:none;max-height:40vh;display:block}
-    body.has-talk .dirs{flex:none;min-height:0;grid-template-rows:auto}
-    body.has-talk .dirs button{min-height:44px}
-    body.has-talk .col{flex:1;min-height:0}
+    #side .pan,#side .dirs,#side .tools,#side .recent{flex:none}
+    #side .tools,#side .board,#side .dirs,#side .pan{
+      width:100%;max-width:none;margin-left:0;margin-right:0;
+    }
+    #side .recent{max-height:72px;overflow:auto}
+    #side .board{
+      flex:1;min-height:0;margin-bottom:0;
+      display:flex;flex-direction:column;overflow:hidden;
+    }
+    #side .board > .asks{
+      flex:1;min-height:0;
+      grid-template-columns:1fr;
+      grid-template-rows:repeat(4,minmax(52px,1fr));
+    }
+    #side .board > .asks[hidden]{display:none}
+    #side .board > .asks button{
+      min-height:52px;height:100%;
+      display:flex;align-items:center;
+    }
+    #side .lead{
+      display:-webkit-box;flex:none;margin-top:0;
+      padding:10px 12px 8px;border-top:1px solid var(--line);
+      font-size:14px;line-height:1.65;color:var(--ink);
+      -webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;
+    }
+    .dirs{margin-bottom:8px}
+    .dirs button{min-height:48px}
+    body.has-talk #side{flex:none;max-height:min(40vh,300px);overflow-y:auto;display:block}
+    body.has-talk #side .tools,body.has-talk #geoNote{display:none}
+    body.has-talk #side .board{display:block;overflow:visible;flex:none}
+    body.has-talk #side .lead{display:none}
+    body.has-talk .col{display:flex;flex:1;min-height:0;min-width:0}
     body.has-talk main{max-height:none;flex:1}
     #sideBtn,#sideClose,.side-head,#faceNote,#sideMask{display:none!important}
     #side .tools{
-      display:grid;grid-template-columns:1fr auto;gap:6px;
+      display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;
       align-items:end;margin-bottom:6px;
     }
-    .cityrow{grid-column:1 / -1}
-    #side .face{grid-column:1;margin-top:0;flex-direction:row;align-items:center;gap:8px}
-    #side #gateBtn{grid-column:2;width:auto;margin-top:0;padding:0 12px}
-    .dirs{display:grid;grid-template-columns:repeat(4,1fr);overflow:visible}
-    .dirs button{
-      flex:none;min-height:56px;
-      border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+    .cityrow{grid-column:1 / -1;min-width:0}
+    #side .face{
+      grid-column:1;margin-top:0;min-width:0;
+      flex-direction:column;align-items:stretch;gap:2px;
     }
-    .dirs button:nth-child(4n){border-right:0}
-    #side .board{margin-bottom:0}
-    #welcome{
-      display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
-    }
+    #side #facing{width:100%;min-width:0}
+    #side #gateBtn{grid-column:2;width:auto;margin-top:0;padding:0 12px;align-self:end}
   }
   @media (min-width:861px){
     #sideBtn,#sideClose{display:none}
   }
 
   @media (max-width:640px){
-    h1{font-size:16px;letter-spacing:.08em}
+    h1{font-size:16px;letter-spacing:.06em}
     .sub{display:none}
-    .hbtn{padding:0 8px;font-size:13px}
-    .asks button{font-size:13px;padding:8px}
+    .brand{min-width:0}
+    .hbtn{padding:0 7px;font-size:13px;letter-spacing:0}
+    .asks button{font-size:14px;padding:8px 10px}
+  }
+  @media (max-width:380px){
+    .seal{width:30px;height:30px;font-size:16px}
+    .hbtn{padding:0 5px;font-size:12px}
   }
   @media (max-height:740px){
     .luopan{width:min(54vw,220px);height:min(54vw,220px);--orbit:78px}
@@ -590,6 +632,7 @@
       <button type="button" data-q="今年哪个方位利财" data-i18n="q_ri_3">今年哪个方位利财</button>
       <button type="button" data-q="开门见灶怎么看" data-i18n="q_ri_4">开门见灶怎么看</button>
     </div>
+    <p class="lead" id="lead" data-i18n="lead">点一句，就按《改命记实录》对原文。书里没写到的，另起一段日常，并标明不是书里的话。</p>
   </div>
   <div class="recent" id="recentBox" hidden>
     <div class="quotes-title" data-i18n="recent">最近问过</div>
@@ -675,6 +718,7 @@ const I18N = {
     ask_gua:'问这一卦', ask_sit:'按这个坐向问书', recent:'最近问过', ask_ph:'问宅、问方位、问日子',
     sit_line:'向{face}、坐{sit}。由 {deg}° 换算，不是书中断语。',
     hint:'书中有据照原文，没有就按日常说清楚 · 仅供消遣',
+    lead:'点一句，就按《改命记实录》对原文。书里没写到的，另起一段日常，并标明不是书里的话。',
     gate_note:'盘面转定之后，用落点去书里对原文。盘子本身不下断语。',
     skip:'跳过', enter:'入问', ask_this:'以此卦问宅', pick_model:'选择模型',
     gate_spin:'起盘', under:'针下',
@@ -710,6 +754,7 @@ const I18N = {
     ask_gua:'Ask this gua', ask_sit:'Ask the book about this facing', recent:'Asked just now', ask_ph:'Ask about the house, a direction, a day',
     sit_line:'Faces {face}, sits {sit}. From {deg}°. Not a line from the book.',
     hint:'Book passages stay quoted. If the book is silent, everyday notes are labeled. For amusement only.',
+    lead:'Tap a line to check the book. If it is silent, a separate everyday note says so.',
     gate_note:'When the plate stops, take the gua into the book. The plate itself decides nothing.',
     skip:'Skip', enter:'Enter', ask_this:'Ask with this gua', pick_model:'Choose a model',
     gate_spin:'Turning', under:'under the needle',
@@ -815,15 +860,19 @@ function setBehind(locked){
     if(node && 'inert' in node) node.inert=locked;
   });
 }
+function focusAsk(){
+  if(window.matchMedia('(max-width:860px)').matches) return;
+  q.focus();
+}
 function openGate(){
   const gen=++gateGen;
   setBehind(true);
-  fitOrbit();
   const idx=Math.floor(Math.random()*8);
   gateGua=GUAS[idx];
   const land=720+((360-idx*45)%360);
   gate.hidden=false;
   gate.classList.remove('out','ready');
+  fitOrbit();
   document.getElementById('gateResult').textContent=t('gate_spin');
   [disk,needle,ring].forEach(node=>{ if(node&&node.getAnimations) node.getAnimations().forEach(a=>a.cancel()); });
   disk.style.transform='none';
@@ -899,7 +948,7 @@ function closeGate(nextQuestion){
     setBehind(false);
     if(showPan) setPan(gua);
     if(nextQuestion) ask(nextQuestion);
-    else q.focus();
+    else focusAsk();
   };
   if(reduceMotion) done();
   else {
@@ -920,6 +969,7 @@ if(window.visualViewport){
   const syncKb=()=>{
     const vv=window.visualViewport;
     document.documentElement.style.setProperty('--vvh', Math.round(vv.height)+'px');
+    document.documentElement.style.setProperty('--vvtop', Math.round(vv.offsetTop)+'px');
   };
   visualViewport.addEventListener('resize', syncKb);
   visualViewport.addEventListener('scroll', syncKb);
@@ -1322,8 +1372,8 @@ async function ask(text, shown){
     scrollBottom();
   }finally{
     if(gen!==askGen) return;
-    BUSY=false; send.disabled=false; send.classList.remove('loading'); send.textContent='问';
-    if(gate.hidden) q.focus();
+    BUSY=false; send.disabled=false; send.classList.remove('loading'); send.textContent=LANG==='en'?'Ask':'问';
+    if(gate.hidden) focusAsk();
   }
 }
 
@@ -1420,7 +1470,7 @@ detectIp();
 document.getElementById('clearBtn').addEventListener('click',()=>{
   askGen++;
   if(askCtrl){ try{ askCtrl.abort(); }catch(err){} askCtrl=null; }
-  BUSY=false; send.disabled=false; send.classList.remove('loading'); send.textContent='问';
+  BUSY=false; send.disabled=false; send.classList.remove('loading'); send.textContent=LANG==='en'?'Ask':'问';
   const keep=chat.firstElementChild;
   chat.innerHTML='';
   if(keep) chat.appendChild(keep);
