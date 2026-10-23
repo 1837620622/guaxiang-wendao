@@ -302,7 +302,7 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
   // 缓存键：模型 + topK + 问题指纹
   const fp = await hashKey(question);
   const historyArr = Array.isArray(body?.history) ? body.history : [];
-  const cacheKey = `v23:ask:${primary}:${topK}:${geo ? geo.name : "-"}:${fp}${historyArr.length ? ":h" + historyArr.length : ""}${imgRaw ? ":img" : ""}`;
+  const cacheKey = `v24:ask:${primary}:${topK}:${geo ? geo.name : "-"}:${fp}${historyArr.length ? ":h" + historyArr.length : ""}${imgRaw ? ":img" : ""}`;
   if (env.CACHE) {
     try {
       const hit: any = await env.CACHE.get(cacheKey, "json");
