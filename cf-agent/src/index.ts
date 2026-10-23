@@ -920,6 +920,8 @@ export default {
       return json({ default: env.MODEL || DEFAULT_MODEL, models: MODELS, providers: providerReady(env) });
     }
     if (url.pathname === "/api/vision" && request.method === "POST") {
+      const rl = await rateLimit(env, ip, "ask");
+      if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
       let vb: any;
       try { vb = await request.json(); } catch { return err("invalid_json", 400); }
       const raw = typeof vb?.image === "string" ? vb.image : "";
@@ -937,12 +939,16 @@ export default {
     if (url.pathname === "/api/websearch") {
       const q = (url.searchParams.get("q") ?? "").trim();
       if (!q) return err("q_required", 400);
+      if (q.length > 80) return err("q_too_long", 400);
+      const rl = await rateLimit(env, ip, "search");
+      if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
       try {
         const t0 = Date.now();
         const results = await webSearch(q, 5);
         return json({ q, ms: Date.now() - t0, count: results.length, results });
-      } catch (e: any) {
-        return json({ error: "websearch_failed", message: String(e?.message ?? e) }, 500);
+      } catch (e) {
+        console.error("websearch failed", e);
+        return json({ error: "websearch_failed" }, 500);
       }
     }
     if (url.pathname === "/api/geo") {

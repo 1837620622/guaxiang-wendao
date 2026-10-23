@@ -394,16 +394,37 @@
   .card-rest.in .quotes{animation:rise .45s ease .16s both}
   .asks{animation:rise .32s ease both}
 
+  #sitAsk{margin-top:8px;min-height:44px;width:100%;border:1px solid var(--ink);background:var(--paper)}
+  #sitAsk[hidden]{display:none}
+  #geoNote:empty,#sitNote:empty{display:none}
+
   @media (max-width:860px){
+    .shell{flex-direction:column}
     #side{
-      position:fixed;z-index:65;top:0;bottom:0;left:0;
-      width:min(86vw,320px);
-      transform:translateX(-105%);
-      transition:transform .5s cubic-bezier(.16,.8,.2,1);
-      padding-top:calc(12px + env(safe-area-inset-top));
+      position:relative;top:auto;right:auto;bottom:auto;left:auto;
+      width:100%;transform:none;z-index:1;flex:none;
+      max-height:min(54vh,460px);overflow-y:auto;
+      border-right:0;border-bottom:1px solid var(--ink);
+      padding:8px 10px 10px;background:var(--paper2);
     }
-    #side.open{transform:none}
-    #sideMask.on{display:block;position:fixed;inset:0;z-index:64;background:rgba(28,24,20,.38)}
+    #sideBtn,#sideClose,.side-head,#faceNote,#sideMask{display:none!important}
+    #side .tools{
+      display:grid;grid-template-columns:1fr auto;gap:6px;
+      align-items:end;margin-bottom:6px;
+    }
+    .cityrow{grid-column:1 / -1}
+    #side .face{grid-column:1;margin-top:0;flex-direction:row;align-items:center;gap:8px}
+    #side #gateBtn{grid-column:2;width:auto;margin-top:0;padding:0 12px}
+    .dirs{display:grid;grid-template-columns:repeat(4,1fr);overflow:visible}
+    .dirs button{
+      flex:none;min-height:56px;
+      border-right:1px solid var(--line);border-bottom:1px solid var(--line);
+    }
+    .dirs button:nth-child(4n){border-right:0}
+    #side .board{margin-bottom:0}
+    #welcome{
+      display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+    }
   }
   @media (min-width:861px){
     #sideBtn,#sideClose{display:none}
@@ -510,6 +531,8 @@
   </div>
   <p class="geo-note" id="geoNote"></p>
   <p class="geo-note" id="faceNote" data-i18n="face_help">站在门内，面朝门外，看手机指南针。不填也可以问。</p>
+  <p class="geo-note" id="sitNote"></p>
+  <button type="button" id="sitAsk" hidden data-i18n="ask_sit">按这个坐向问书</button>
   <div class="pan" id="pan" hidden>
     <span id="panText">本盘</span>
     <button type="button" id="panAsk" data-q="" data-i18n="ask_gua">问这一卦</button>
@@ -634,7 +657,8 @@ const I18N = {
     title:'卦象问道', sub:'改命记实录 · 有据照书', side_open:'问法', model:'模型', book:'原文', clear:'清空',
     side_title:'问什么', close:'关闭', city:'城市', city_ph:'杭州', locate:'定位', facing:'大门朝外（度）',
     respin:'再起一盘', face_help:'站在门内，面朝门外，看手机指南针。不填也可以问。',
-    ask_gua:'问这一卦', recent:'最近问过', ask_ph:'问宅、问方位、问日子',
+    ask_gua:'问这一卦', ask_sit:'按这个坐向问书', recent:'最近问过', ask_ph:'问宅、问方位、问日子',
+    sit_line:'向{face}、坐{sit}。由 {deg}° 换算，不是书中断语。',
     hint:'书中有据照原文，没有就按日常说清楚 · 仅供消遣',
     gate_note:'盘面转定之后，用落点去书里对原文。盘子本身不下断语。',
     skip:'跳过', enter:'入问', ask_this:'以此卦问宅', pick_model:'选择模型',
@@ -668,7 +692,8 @@ const I18N = {
     title:'Gua Xiang', sub:'The book first. Everyday notes are marked.', side_open:'Ask', model:'Model', book:'Text', clear:'Clear',
     side_title:'What to ask', close:'Close', city:'City', city_ph:'Hangzhou', locate:'Locate', facing:'Door facing (°)',
     respin:'Spin again', face_help:'Stand inside, face out the door, and read the phone compass. You can leave this blank.',
-    ask_gua:'Ask this gua', recent:'Asked just now', ask_ph:'Ask about the house, a direction, a day',
+    ask_gua:'Ask this gua', ask_sit:'Ask the book about this facing', recent:'Asked just now', ask_ph:'Ask about the house, a direction, a day',
+    sit_line:'Faces {face}, sits {sit}. From {deg}°. Not a line from the book.',
     hint:'Book passages stay quoted. If the book is silent, everyday notes are labeled. For amusement only.',
     gate_note:'When the plate stops, take the gua into the book. The plate itself decides nothing.',
     skip:'Skip', enter:'Enter', ask_this:'Ask with this gua', pick_model:'Choose a model',
@@ -723,12 +748,38 @@ cityInput.addEventListener('input',()=>{
     localStorage.setItem('gxw_city_src','user');
   }catch(err){}
 });
+const MTN = ['子','癸','丑','艮','寅','甲','卯','乙','辰','巽','巳','丙','午','丁','未','坤','申','庚','酉','辛','戌','乾','亥','壬'];
+function mountain(deg){
+  const d = ((Number(deg) % 360) + 360) % 360;
+  return MTN[Math.floor(((d + 7.5) % 360) / 15)];
+}
+function renderSit(){
+  const note = document.getElementById('sitNote');
+  const btn = document.getElementById('sitAsk');
+  const raw = facingInput.value.trim();
+  const n = Number(raw);
+  if(raw==='' || !Number.isFinite(n) || n<0 || n>=360){
+    note.textContent = '';
+    btn.hidden = true;
+    btn.dataset.q = '';
+    return;
+  }
+  const deg = Math.round(n);
+  const face = mountain(deg);
+  const sit = mountain(deg + 180);
+  note.textContent = t('sit_line').replace('{face}', face).replace('{sit}', sit).replace('{deg}', String(deg));
+  btn.hidden = false;
+  btn.dataset.q = '大门朝外大约'+deg+'度，向'+face+'坐'+sit+'，家里这个方位书里怎么说';
+}
+facingInput.addEventListener('input', renderSit);
 facingInput.addEventListener('change',()=>{
   const raw = facingInput.value.trim();
-  if(!raw){ try{ localStorage.removeItem('gxw_facing'); }catch(err){} return; }
+  if(!raw){ try{ localStorage.removeItem('gxw_facing'); }catch(err){} renderSit(); return; }
   const n = Number(raw);
   if(n>=0 && n<360){ facingInput.value=String(Math.round(n)); try{ localStorage.setItem('gxw_facing', facingInput.value); }catch(err){} }
+  renderSit();
 });
+renderSit();
 
 /* ===== 罗盘开场：转定后停住，跳过随时可走 ===== */
 const gate=document.getElementById('gate');
@@ -1288,7 +1339,9 @@ document.getElementById('langBtn').addEventListener('click',()=>{
   applyLang();
   const pan=document.getElementById('pan');
   if(!pan.hidden) setPan(gateGua);
+  renderSit();
 });
+document.getElementById('sitAsk').addEventListener('click',()=>askFrom(document.getElementById('sitAsk')));
 const RECENT=[];
 try{
   const saved=JSON.parse(localStorage.getItem('gxw_recent')||'[]');
