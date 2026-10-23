@@ -868,8 +868,11 @@ async function handleStats(env: Env): Promise<Response> {
 /** 只返回城市和校方位用的偏差，不回传 IP，也不落库。 */
 function whereFromEdge(request: Request, url: URL) {
   const cf = (request as Request & { cf?: Record<string, unknown> }).cf || {};
-  const qLat = Number(url.searchParams.get("lat"));
-  const qLon = Number(url.searchParams.get("lon"));
+  // 缺参数时 get 得到 null，Number(null) 是 0，不能当成用户定位
+  const latParam = url.searchParams.get("lat");
+  const lonParam = url.searchParams.get("lon");
+  const qLat = latParam ? Number(latParam) : NaN;
+  const qLon = lonParam ? Number(lonParam) : NaN;
   const hasGps = Number.isFinite(qLat) && Number.isFinite(qLon) && Math.abs(qLat) <= 90 && Math.abs(qLon) <= 180;
   const cfLat = Number(cf.latitude);
   const cfLon = Number(cf.longitude);
