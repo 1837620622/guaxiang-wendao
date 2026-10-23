@@ -1,5 +1,7 @@
 # 依赖
 node_modules/
+.dev.vars
+cf-agent/.dev.vars
 .wrangler/
 
 # 数据（体积大，本地留存；部署时由 scripts/build_chapters.py 生成）

@@ -243,7 +243,7 @@ export function toCitations(hits: SearchHit[]): Citation[] {
     title: h.title,
     p0: h.p0,
     p1: h.p1,
-    excerpt: h.text.length > 300 ? h.text.slice(0, 300) + "…" : h.text,
+    excerpt: h.text.length > 520 ? h.text.slice(0, 520) + "…" : h.text,
     full: h.text,
   }));
 }

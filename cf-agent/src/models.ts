@@ -1,52 +1,51 @@
-/** Workers AI 上可用于中文问答的文本模型（已逐个实测） */
+/** 已实测可用的文本模型。provider=workers 走 Workers AI，其余走 OpenAI 兼容接口。 */
 export interface ModelInfo {
   id: string;
   label: string;
   note: string;
-  group: "推荐" | "中文强" | "快速" | "推理型";
-  /** 是否为思考链模型（需要更大 token 预算） */
+  group: "推荐" | "通义" | "智谱" | "推理" | "兜底";
+  provider: "groq" | "dashscope" | "zhipu" | "workers";
+  /** 思考链会吃掉 max_tokens，需要更大预算 */
   reasoning?: boolean;
 }
 
-/**
- * 实测数据（2026-10-23，REST 直连，8 token 测试提示）
- * 延迟是"模型本身"的量级，实际问答还要加 prompt 处理时间。
- */
 export const MODELS: ModelInfo[] = [
-  // —— 默认与首选 ——
-  { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", label: "Llama 3.3 70B", note: "最快最稳 · 默认", group: "推荐" },
-  { id: "@cf/mistralai/mistral-small-3.1-24b-instruct", label: "Mistral Small 3.1", note: "极快 · 约 3s", group: "推荐" },
-  { id: "@cf/deepseek-ai/deepseek-v4-flash-0731", label: "DeepSeek V4 Flash", note: "中文强 · 约 4s", group: "推荐" },
-  { id: "@cf/deepseek-ai/deepseek-v4.1-flash-1017", label: "DeepSeek V4.1 Flash", note: "中文强 · 约 4s", group: "推荐" },
+  { id: "qwen/qwen3.8-27b", label: "Qwen 3.8 27B", note: "Groq · 默认", group: "推荐", provider: "groq" },
+  { id: "qwen-plus", label: "通义 Plus", note: "DashScope · 中文稳", group: "通义", provider: "dashscope" },
+  { id: "qwen-turbo", label: "通义 Turbo", note: "DashScope · 易限流", group: "通义", provider: "dashscope" },
+  { id: "glm-4-flash", label: "GLM-4 Flash", note: "智谱 · 快", group: "智谱", provider: "zhipu" },
+  { id: "glm-4-flash-250414", label: "GLM-4 Flash 0414", note: "智谱 · 快", group: "智谱", provider: "zhipu" },
 
-  // —— 中文强 ——
-  { id: "@cf/qwen/qwen3.8-27b", label: "Qwen 3.8 27B", note: "中文强 · 约 3s", group: "中文强" },
-  { id: "@cf/moonshotai/kimi-k2.6", label: "Kimi K2.6", note: "长文强 · 约 4s", group: "中文强" },
-  { id: "@cf/zai-org/glm-4.7-flash", label: "GLM-4.7 Flash", note: "中文好 · 约 9s", group: "中文强" },
-  { id: "@cf/deepseek-ai/deepseek-v4-pro-0813", label: "DeepSeek V4 Pro", note: "更强 · 约 3s", group: "中文强" },
-  { id: "@cf/zai-org/glm-5.3-flash", label: "GLM-5.3 Flash", note: "中文好 · 约 10s", group: "中文强" },
+  { id: "openai/gpt-oss-20b", label: "GPT-OSS 20B", note: "Groq · 会先想", group: "推理", provider: "groq", reasoning: true },
+  { id: "openai/gpt-oss-120b", label: "GPT-OSS 120B", note: "Groq · 会先想", group: "推理", provider: "groq", reasoning: true },
+  { id: "deepseek-v4.1-flash-1017", label: "DeepSeek V4.1 Flash", note: "DashScope · 会先想", group: "推理", provider: "dashscope", reasoning: true },
+  { id: "glm-4.5-flash", label: "GLM-4.5 Flash", note: "智谱 · 会先想", group: "推理", provider: "zhipu", reasoning: true },
 
-  // —— 快速轻量 ——
-  { id: "@cf/meta/llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout", note: "轻量 · 约 2s", group: "快速" },
-  { id: "@cf/openai/gpt-oss-20b", label: "GPT-OSS 20B", note: "轻量 · 约 3s", group: "快速" },
-  { id: "@cf/nvidia/nemotron-3-120b-a12b", label: "Nemotron 3 120B", note: "约 2s", group: "快速" },
-
-  // —— 推理型（会先思考，慢，但结论更细）——
-  { id: "@cf/qwen/qwen3-30b-a3b-fp8", label: "Qwen3 30B A3B", note: "推理型 · 约 5s", group: "推理型", reasoning: true },
-  { id: "@cf/openai/gpt-oss-120b", label: "GPT-OSS 120B", note: "推理型 · 约 5s", group: "推理型", reasoning: true },
-  { id: "@cf/zai-org/glm-5.3", label: "GLM-5.3", note: "推理型 · 约 5s", group: "推理型", reasoning: true },
-  { id: "@cf/google/gemma-4-26b-a4b-it", label: "Gemma 4 26B", note: "推理型 · 约 14s", group: "推理型", reasoning: true },
+  { id: "@cf/meta/llama-3.3-70b-instruct-fp8-fast", label: "Llama 3.3 70B", note: "Workers · 兜底", group: "兜底", provider: "workers" },
+  { id: "@cf/mistralai/mistral-small-3.1-24b-instruct", label: "Mistral Small 3.1", note: "Workers · 兜底", group: "兜底", provider: "workers" },
+  { id: "@cf/deepseek-ai/deepseek-v4-flash-0731", label: "DeepSeek V4 Flash", note: "Workers · 兜底", group: "兜底", provider: "workers" },
+  { id: "@cf/zai-org/glm-4.7-flash", label: "GLM-4.7 Flash", note: "Workers · 兜底", group: "兜底", provider: "workers" },
 ];
 
-export const DEFAULT_MODEL = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+export const DEFAULT_MODEL = "qwen/qwen3.8-27b";
 
-/** 兜底优先顺序（快而稳） */
+/** 失败后换模型的顺序：Groq → 通义 → 智谱 → Workers */
 export const FALLBACK_CHAIN = [
+  "qwen/qwen3.8-27b",
+  "qwen-plus",
+  "glm-4-flash",
   "@cf/meta/llama-3.3-70b-instruct-fp8-fast",
   "@cf/mistralai/mistral-small-3.1-24b-instruct",
-  "@cf/deepseek-ai/deepseek-v4-flash-0731",
 ];
 
+export function findModel(modelId: string): ModelInfo | undefined {
+  return MODELS.find((m) => m.id === modelId);
+}
+
+export function providerOf(modelId: string): ModelInfo["provider"] {
+  return findModel(modelId)?.provider ?? "workers";
+}
+
 export function isReasoning(modelId: string): boolean {
-  return MODELS.find((m) => m.id === modelId)?.reasoning === true;
+  return findModel(modelId)?.reasoning === true;
 }

@@ -218,6 +218,6 @@ export function webPromptBlock(results: WebResult[]): string {
   const body = results
     .map((r, i) => `[W${i + 1}] ${r.title}\n${r.snippet}\n来源：${r.url}`)
     .join("\n\n");
-  return `【联网结果（书里没有时的补充资料，优先级低于书内原文）】
+  return `【联网结果（不能当成《改命记实录》。用到时 kind 写 web，refs 写 W 编号。不要把这里的吉凶断语抄进 daily）】
 ${body}`;
 }

@@ -8,6 +8,10 @@ export interface Env {
   BOOK_TITLE?: string;
   BOOK_AUTHOR?: string;
   WEB_SEARCH?: string;
+  /** 逗号或空白分隔，多把密钥轮询。不要写进仓库。 */
+  GROQ_API_KEYS?: string;
+  DASHSCOPE_API_KEYS?: string;
+  ZHIPU_API_KEYS?: string;
 }
 
 export interface Chunk {
@@ -38,10 +42,12 @@ export interface Citation {
 
 export interface AnswerPoint {
   text: string;
-  /** 数字 = 书内引用；"W1" = 联网引用 */
+  /** 数字 = 书内引用；"W1" = 联网引用；日常做法不挂编号 */
   refs: (number | string)[];
-  /** refs 是否全部合法 */
+  /** 书中或联网出处是否对得上。日常做法恒为 false */
   verified: boolean;
+  /** book 必须能对上原文；web 只来自联网；daily 是书外的过日子做法 */
+  kind?: "book" | "daily" | "web";
 }
 
 export interface Quote {
@@ -69,6 +75,8 @@ export interface AskResponse {
   points: AnswerPoint[];
   quotes: Quote[];
   missing: string;
+  /** 书里没写到时的日常做法。页面上必须标明不是原文 */
+  daily?: string;
   citations: Citation[];
   elapsedMs: number;
   model: string;

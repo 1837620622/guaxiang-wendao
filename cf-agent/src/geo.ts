@@ -226,18 +226,70 @@ export function resolveLocation(query: string): GeoInfo | null {
     }
   }
   if (!coords || !name) return null;
-
   const [lat, lon, region] = coords;
+  return geoFromCoords(name, lat, lon, region);
+}
+
+/** 用坐标现算真太阳时。中国境内才给磁偏角近似，境外写明未校正。 */
+export function geoFromCoords(name: string, lat: number, lon: number, region = ""): GeoInfo {
   const lonOffsetMin = Math.round((lon - 120) * 4);
   const eotMin = Math.round(equationOfTime(dayOfYear()) * 10) / 10;
   const trueSolarOffsetMin = Math.round(lonOffsetMin + eotMin);
-  const declination = approxDeclination(lat, lon);
-
-  const note =
-    `当地真太阳时 = 北京时间 ${trueSolarOffsetMin >= 0 ? "+" : ""}${trueSolarOffsetMin} 分钟；` +
-    `磁偏角约 ${declination}°（罗盘读数需按当地实测修正，此值为近似）。`;
-
+  const inChina = lat > 18 && lat < 54 && lon > 73 && lon < 135;
+  const declination = inChina ? approxDeclination(lat, lon) : 0;
+  const note = inChina
+    ? `当地真太阳时 = 北京时间 ${trueSolarOffsetMin >= 0 ? "+" : ""}${trueSolarOffsetMin} 分钟；磁偏角约 ${declination}°（罗盘读数需按当地实测修正，此值为近似）。`
+    : `当地真太阳时 = 北京时间 ${trueSolarOffsetMin >= 0 ? "+" : ""}${trueSolarOffsetMin} 分钟；此处不在中国境内，磁偏角未校正，以手机指南针实测为准。`;
   return { name, lat, lon, lonOffsetMin, eotMin, trueSolarOffsetMin, declination, region, note };
+}
+
+function distanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const r = 6371;
+  const p1 = (lat1 * Math.PI) / 180;
+  const p2 = (lat2 * Math.PI) / 180;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(dLon / 2) ** 2;
+  return 2 * r * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+/** 坐标落在某城市附近才吸附，避免把海外位置硬配到中国城市。 */
+export function nearestCity(lat: number, lon: number, maxKm = 160): GeoInfo | null {
+  let bestName = "";
+  let bestD = Infinity;
+  for (const key of Object.keys(CITIES)) {
+    const [clat, clon] = CITIES[key];
+    const d = distanceKm(lat, lon, clat, clon);
+    if (d < bestD) {
+      bestD = d;
+      bestName = key;
+    }
+  }
+  if (!bestName || bestD > maxKm) return null;
+  return resolveLocation(bestName);
+}
+
+const EN_ALIAS: Record<string, string> = {
+  beijing: "北京", shanghai: "上海", tianjin: "天津", chongqing: "重庆",
+  guangzhou: "广州", shenzhen: "深圳", hangzhou: "杭州", ningbo: "宁波",
+  nanjing: "南京", suzhou: "苏州", wuxi: "无锡", wuhan: "武汉", chengdu: "成都",
+  xian: "西安", "xi'an": "西安", changsha: "长沙", zhengzhou: "郑州",
+  qingdao: "青岛", jinan: "济南", dalian: "大连", shenyang: "沈阳",
+  harbin: "哈尔滨", kunming: "昆明", guiyang: "贵阳", nanning: "南宁",
+  haikou: "海口", sanya: "三亚", lanzhou: "兰州", xining: "西宁",
+  yinchuan: "银川", urumqi: "乌鲁木齐", lhasa: "拉萨",
+  hohhot: "呼和浩特", huhhot: "呼和浩特",
+  "hong kong": "香港", hongkong: "香港", macau: "澳门", macao: "澳门",
+  taipei: "台北", taichung: "台中", kaohsiung: "高雄",
+  fuzhou: "福州", xiamen: "厦门", hefei: "合肥", nanchang: "南昌",
+  shijiazhuang: "石家庄", taiyuan: "太原", changchun: "长春", wenzhou: "温州",
+};
+
+/** Cloudflare 给的英文城市名，对上表内城市。对不上就返回空。 */
+export function resolveEnglishCity(name: string): GeoInfo | null {
+  const key = name.trim().toLowerCase().replace(/\s+/g, " ");
+  const zh = EN_ALIAS[key] || EN_ALIAS[key.replace(/\s+/g, "")];
+  return zh ? resolveLocation(zh) : null;
 }
 
 /** 给提示词用的地理描述 */
@@ -247,7 +299,7 @@ export function geoPromptBlock(g: GeoInfo): string {
 坐标：${g.lat.toFixed(3)}°N, ${g.lon.toFixed(3)}°E
 真太阳时：北京时间 ${g.trueSolarOffsetMin >= 0 ? "+" : ""}${g.trueSolarOffsetMin} 分钟（算时辰、择日要用真太阳时）
 磁偏角：约 ${g.declination}°（罗盘读数的修正值，近似）
-说明：以上只用于确定方位与时辰。风水结论仍必须来自 <资料>；资料没有因地制宜的内容时，明确写出来。`;
+说明：经纬度只用来校方位和真太阳时，不要据此编黄历。书里写了的做法按书中原文；书里没有的生活步骤写入 daily，并标明不是书中依据。`;
 }
 
 /** 从一段文字里找出城市名（取最长匹配） */
