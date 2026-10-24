@@ -81,7 +81,6 @@ export interface AskResponse {
   elapsedMs: number;
   model: string;
   cached?: boolean;
-  raw?: string;
   geo?: {
     name: string;
     trueSolarOffsetMin: number;

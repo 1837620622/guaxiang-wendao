@@ -8,3 +8,4 @@ import_progress.log
 .DS_Store
 data/sql/
 data/chunks.jsonl
+.test-build/

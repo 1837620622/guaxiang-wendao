@@ -6,16 +6,45 @@ import { runExternal } from "./llm";
 import { resolveLocation, findLocationInText, listCities, geoPromptBlock, nearestCity, geoFromCoords, resolveEnglishCity } from "./geo";
 import { webSearch, webPromptBlock, type WebResult } from "./websearch";
 import { analyzeImage, base64ToBytes, imageKind, visionPromptBlock, MAX_BYTES, type VisionResult } from "./vision";
+import { extractJSON, verifyQuote, cleanText, clip, pointTouchesSource, scrubFakeChapter, searchText } from "./verify";
+import { withTimeout } from "./util";
 
 const ALLOWED_MODELS = new Set(MODELS.map((m) => m.id));
 
 /** 限流：每 IP 每分钟 / 每天 */
 const RATE = { perMinute: 12, perDay: 60, searchPerMinute: 30 };
 
+/** 一次问答的总预算（识图、检索、联网、所有兜底模型都算在内）。前端 110 秒后才放弃。 */
+const ASK_BUDGET_MS = 65000;
+/** 单次模型调用的上限，免得一家慢到把整个预算吃光 */
+const ATTEMPT_MS = 26000;
+
 const SEC_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "X-Frame-Options": "SAMEORIGIN",
+};
+
+/**
+ * 页面与静态资源的安全头。页面是内联脚本和样式，所以 script/style 放行 'unsafe-inline'；
+ * 外部只放行 Google 字体和首页视频所在的域名，其余一律禁止。
+ */
+const MEDIA_HOST = "https://d8j0ntlcm91z4.cloudfront.net";
+const PAGE_HEADERS: Record<string, string> = {
+  "Content-Security-Policy": [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com",
+    `img-src 'self' data: blob: ${MEDIA_HOST}`,
+    `media-src 'self' ${MEDIA_HOST}`,
+    "connect-src 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+    "frame-ancestors 'self'",
+  ].join("; "),
+  "Permissions-Policy": "geolocation=(self), microphone=(self)",
 };
 
 function json(data: unknown, status = 200, extra: Record<string, string> = {}) {
@@ -32,6 +61,25 @@ function json(data: unknown, status = 200, extra: Record<string, string> = {}) {
 
 function err(code: string, status: number) {
   return json({ error: code }, status);
+}
+
+/**
+ * 写接口只认同源的 JSON 请求。跨站页面要发 application/json 必须先过预检，
+ * 而这里不回应预检，所以它们发不出来；带了别的 Origin 的也直接拒掉。
+ */
+function guardPost(request: Request, url: URL): Response | null {
+  const type = (request.headers.get("content-type") || "").toLowerCase();
+  if (!type.startsWith("application/json")) return err("unsupported_media_type", 415);
+  const origin = request.headers.get("origin");
+  if (origin && origin !== url.origin) return err("bad_origin", 403);
+  return null;
+}
+
+/** 给 ASSETS 返回的静态文件补上安全头 */
+async function withPageHeaders(res: Response): Promise<Response> {
+  const headers = new Headers(res.headers);
+  for (const [k, v] of Object.entries({ ...SEC_HEADERS, ...PAGE_HEADERS })) headers.set(k, v);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
 function todayCN() {
@@ -97,74 +145,6 @@ async function hashBytes(bytes: Uint8Array): Promise<string> {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40);
 }
 
-/** 从模型输出里抠出含 verdict 的 JSON 对象 */
-function extractJSON(text: string): any | null {
-  if (!text) return null;
-  let t = text.trim();
-  t = t.replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-
-  const candidates: string[] = [];
-  let depth = 0, start = -1, inStr = false, esc = false;
-  for (let i = 0; i < t.length; i++) {
-    const c = t[i];
-    if (inStr) {
-      if (esc) esc = false;
-      else if (c === "\\") esc = true;
-      else if (c === '"') inStr = false;
-      continue;
-    }
-    if (c === '"') { inStr = true; continue; }
-    if (c === "{") { if (depth === 0) start = i; depth++; }
-    else if (c === "}") {
-      depth--;
-      if (depth === 0 && start >= 0) {
-        candidates.push(t.slice(start, i + 1));
-        start = -1;
-      }
-    }
-  }
-  // 优先含 verdict 的，其次最后一个平衡对象
-  for (const cand of [...candidates].reverse()) {
-    if (!/"verdict"\s*:/.test(cand)) continue;
-    try { return JSON.parse(cand); } catch {}
-  }
-  for (const cand of [...candidates].reverse()) {
-    try { return JSON.parse(cand); } catch {}
-  }
-  return null;
-}
-
-const norm = (s: string) => (s || "").replace(/[\s\u3000，。！？、；：""''（）()《》【】…—\-·]/g, "");
-
-/**
- * 引用校验（严格）：
- *  - 整段归一化后必须能在原文里找到
- *  - 或按省略号切段，每段都必须按顺序命中
- */
-function verifyQuote(q: string, source: string): boolean {
-  if (!q || !source) return false;
-  const a = norm(q);
-  const b = norm(source);
-  if (a.length < 6) return false;
-  if (b.includes(a)) return true;
-
-  const segs = q
-    .split(/…+|\.{3,}|。{3,}|\s*……\s*/)
-    .map(norm)
-    .filter((s) => s.length >= 6);
-  if (segs.length >= 2) {
-    let pos = 0, ok = 0;
-    for (const s of segs) {
-      const idx = b.indexOf(s, pos);
-      if (idx >= 0) { ok++; pos = idx + s.length; }
-    }
-    return ok === segs.length;
-  }
-  return false;
-}
-
-const clip = (s: unknown, n: number) => String(s ?? "").trim().slice(0, n);
-
 function sanitizeCitations(cites: Citation[]): Citation[] {
   return cites.map(({ full, ...rest }) => rest);
 }
@@ -176,12 +156,13 @@ async function runOnce(
   system: string,
   user: string,
   maxTokens: number,
-  timeoutMs: number
+  deadline: number
 ): Promise<{ text: string; finish: string; reasoningLen: number; usage: number }> {
+  const timeoutMs = Math.min(ATTEMPT_MS, deadline - Date.now());
   if (providerOf(model) !== "workers") {
-    return runExternal(env, model, system, user, maxTokens, timeoutMs, isReasoning(model));
+    return runExternal(env, model, system, user, maxTokens, timeoutMs, isReasoning(model), deadline);
   }
-  const task = env.AI.run(model as any, {
+  const task: Promise<any> = env.AI.run(model as any, {
     messages: [
       { role: "system", content: system },
       { role: "user", content: user },
@@ -189,8 +170,7 @@ async function runOnce(
     max_tokens: maxTokens,
     temperature: 0.15,
   });
-  const timeout = new Promise<never>((_, rej) => setTimeout(() => rej(new Error("ai_timeout")), timeoutMs));
-  const out: any = await Promise.race([task, timeout]);
+  const out: any = await withTimeout(task, timeoutMs, "ai_timeout");
 
   const o = out?.result ?? out ?? {};
   const ch = o?.choices?.[0] ?? {};
@@ -208,15 +188,9 @@ async function runOnce(
  * 带重试的 AI 调用：
  * 推理型模型的思考过程也占 max_tokens，预算不够时 content 为空、finish=length。
  * 这时把预算翻倍重试一次，而不是直接判失败。
+ * deadline 由调用方给整次问答定一个，所有兜底模型共用，不各算各的。
  */
-async function callLLM(
-  env: Env,
-  model: string,
-  system: string,
-  user: string,
-  timeoutMs = 26000,
-  deadline = Date.now() + 65000
-): Promise<string> {
+async function callLLM(env: Env, model: string, system: string, user: string, deadline: number): Promise<string> {
   // 推理型模型思考链也占额度，起步就给大预算
   // 回答要写步骤和日常补充，JSON 比短句长，预算跟着加大
   const budgets = isReasoning(model) ? [6000, 10000] : [4500, 8000];
@@ -224,7 +198,7 @@ async function callLLM(
   for (let i = 0; i < budgets.length; i++) {
     if (deadline - Date.now() < 5000) break;
     const t0 = Date.now();
-    const r = await runOnce(env, model, system, user, budgets[i], Math.min(timeoutMs, deadline - Date.now()));
+    const r = await runOnce(env, model, system, user, budgets[i], deadline);
 
     if (r.text && r.text.trim().length > 20) return r.text;
 
@@ -249,35 +223,6 @@ function extractText(out: any): string {
   if (ch?.text) return String(ch.text);
   if (o?.output_text) return String(o.output_text);
   return ""; // 不再把 reasoning 当答案
-}
-
-/** 自由文本后置清洗：限长 + 去掉危险协议 */
-function cleanText(s: unknown, max: number): string {
-  return clip(s, max)
-    .replace(/javascript\s*:/gi, "")
-    .replace(/data\s*:\s*text\/html/gi, "");
-}
-
-/** 书中做法是否复用了原文里连续四个字。解释可以写细，但不能和原文毫无交集。 */
-function pointTouchesSource(text: string, hay: string): boolean {
-  if (!text || !hay) return false;
-  const runs = text.match(/[\u4e00-\u9fff]{4,}/g) || [];
-  for (const run of runs) {
-    for (let i = 0; i + 4 <= run.length; i++) {
-      if (hay.includes(run.slice(i, i + 4))) return true;
-    }
-  }
-  return false;
-}
-
-/** 日常段里冒出资料中不存在的章号时删掉，避免被看成书中引用。 */
-function scrubFakeChapter(text: string, chapters: Set<number>): string {
-  return text
-    .replace(/第\s*(\d+)\s*章(?:《[^》]{0,40}》)?(?:第\s*\d+\s*[–\-到至]\s*\d+\s*段)?/g, (all, n) =>
-      chapters.has(Number(n)) ? all : ""
-    )
-    .replace(/[ \t]{2,}/g, " ")
-    .trim();
 }
 
 /** 检索和模型都没给出可用正文时，仍交一段标明出处的过日子做法。 */
@@ -307,43 +252,9 @@ function everydayFallback(question: string, lang: "zh" | "en" = "zh"): { conclus
   };
 }
 
-/** 整词匹配。southeast 不能再被 east 拆成正东。 */
-function wordRe(body: string): RegExp {
-  return new RegExp("(?<![a-z-])(?:" + body + ")(?![a-z-])", "i");
-}
-
-/** 英文提问时给检索补中文词，书是中文的。 */
-function searchText(question: string, lang: "zh" | "en"): string {
-  const zhCount = (question.match(/[\u4e00-\u9fff]/g) || []).length;
-  if (lang !== "en" && zhCount >= 2) return question;
-  const pairs: [RegExp, string][] = [
-    [wordRe("wealth|money|fortune|cash"), "财位"],
-    [wordRe("living\\s*room|lounge"), "客厅"],
-    [wordRe("bed(?:room)?|pillow"), "卧室 床头"],
-    [wordRe("kitchen|stove"), "厨房 灶"],
-    [wordRe("bath(?:room)?|toilet|restroom"), "卫生间"],
-    [wordRe("mirror"), "镜子"],
-    [wordRe("door|entrance|entry"), "大门 玄关"],
-    [wordRe("fish(?:\\s*tank)?"), "鱼缸"],
-    [wordRe("study|desk"), "书房"],
-    [wordRe("move|moving|calendar"), "搬家 日子"],
-    [wordRe("taboo|avoid|forbid"), "禁忌"],
-    [wordRe("southeast|south-east"), "巽 东南"],
-    [wordRe("northeast|north-east"), "艮 东北"],
-    [wordRe("southwest|south-west"), "坤 西南"],
-    [wordRe("northwest|north-west"), "乾 西北"],
-    [wordRe("north"), "坎 北"],
-    [wordRe("south"), "离 南"],
-    [wordRe("east"), "震 东"],
-    [wordRe("west"), "兑 西"],
-    [wordRe("clutter|mess"), "杂物"],
-  ];
-  const extra = pairs.filter(([re]) => re.test(question)).map(([, zh]) => zh);
-  return extra.length ? `${question} ${extra.join(" ")}` : question;
-}
-
 async function handleAsk(request: Request, env: Env, ip: string): Promise<Response> {
   const t0 = Date.now();
+  const deadline = t0 + ASK_BUDGET_MS;
 
   const rl = await rateLimit(env, ip, "ask");
   if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
@@ -353,11 +264,11 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
   const body = packed.body;
   if (typeof body?.question !== "string") return err("question_required", 400);
   const question = body.question.trim();
-  const hasImg = typeof (body as any)?.image === "string" && (body as any).image.length > 0;
+  const hasImg = typeof body?.image === "string" && body.image.length > 0;
   if (!question && !hasImg) return err("question_required", 400);
   if (question.length > 400) return err("question_too_long", 400);
   const lang: "zh" | "en" = body?.lang === "en" ? "en" : "zh";
-  const han = (question.match(/[\u4e00-\u9fff]/g) || []).length;
+  const han = (question.match(/[一-鿿]/g) || []).length;
   const tooShort = lang === "en" ? question.length < 3 : han < 2 && question.length < 4;
   if (!hasImg && tooShort) {
     const hint = lang === "en"
@@ -446,11 +357,11 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
     return err("retrieval_unavailable", 502);
   }
 
-  // 联网：书里没结果，或问题本身要实时信息
+  // 联网：书里没结果，或问题本身要实时信息。纯图片提问没有文字可搜，不联网。
   const realtimeIntent = /今天|今日|现在|今年|实时|新闻|天气|多少度|最近|最新|2025|2026|2027|当下|today|this year|right now/i.test(question);
   const needWeb = hits.length === 0 || (realtimeIntent && hits.length < 3);
   let webResults: WebResult[] = [];
-  if (needWeb && env.WEB_SEARCH !== "off") {
+  if (needWeb && question && env.WEB_SEARCH !== "off") {
     const wKey = `web:v1:${await hashKey(question)}`;
     try {
       if (env.CACHE) {
@@ -497,10 +408,12 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
   let usedModel = primary;
   let parsed: any = null;
   // 兜底链：首选 → 环境配置的兜底 → Workers。正文不是合法 JSON 就换下一家。
+  // 所有模型共用同一个截止时间。
   const tryModels = [primary, env.FALLBACK_MODEL, ...FALLBACK_CHAIN].filter(Boolean) as string[];
   for (const m of [...new Set(tryModels)]) {
+    if (deadline - Date.now() < 5000) break;
     try {
-      const text = await callLLM(env, m, buildSystemPrompt(lang), prompt);
+      const text = await callLLM(env, m, buildSystemPrompt(lang), prompt, deadline);
       if (!text) continue;
       const got = extractJSON(text);
       raw = text;
@@ -560,6 +473,8 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
         }
       : dailyOnly();
   } else if (!parsed) {
+    // 原始输出只记日志，不回传：它可能夹着模型的思考过程
+    console.log(`[llm] unparsed ${usedModel} len=${raw.length}`);
     resp = cites.length
       ? {
           question,
@@ -571,7 +486,6 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
           citations: sanitizeCitations(cites),
           elapsedMs: Date.now() - t0,
           model: usedModel,
-          raw: cleanText(raw, 600),
           geo: geoOut,
         }
       : dailyOnly();
@@ -805,11 +719,16 @@ async function handleToc(env: Env): Promise<Response> {
 }
 
 async function handleChapter(env: Env, url: URL): Promise<Response> {
-  const noRaw = url.searchParams.get("no");
-  const ordRaw = url.searchParams.get("ord");
-  if (!noRaw && !ordRaw) return err("no_required", 400);
+  const noParam = url.searchParams.get("no");
+  const ordParam = url.searchParams.get("ord");
+  // 有 no 用 no，否则用 ord。空字符串不算参数，所以 ?no=&ord=5 按 ord 查。
+  const byNo = Boolean(noParam);
+  const raw = byNo ? noParam : ordParam;
+  if (!raw) return err("no_required", 400);
+  const val = Number(raw);
+  if (!Number.isInteger(val) || val < 1 || val > 100000) return err("bad_param", 400);
 
-  const key = `ch:v2:${noRaw ?? ""}:${ordRaw ?? ""}`;
+  const key = `ch:v3:${byNo ? "no" : "ord"}:${val}`;
   if (env.CACHE) {
     try {
       const hit = await env.CACHE.get(key);
@@ -818,12 +737,10 @@ async function handleChapter(env: Env, url: URL): Promise<Response> {
   }
 
   try {
-    const sql = noRaw
+    const sql = byNo
       ? "SELECT ord, no, title, body FROM chapters WHERE no = ? LIMIT 1"
       : "SELECT ord, no, title, body FROM chapters WHERE ord = ? LIMIT 1";
-    const val = Number(noRaw ?? ordRaw);
-    if (!Number.isFinite(val)) return err("bad_param", 400);
-    const row = await env.DB.prepare(sql).bind(Math.trunc(val)).first<any>();
+    const row = await env.DB.prepare(sql).bind(val).first<any>();
     if (!row) return err("chapter_not_found", 404);
 
     const prev = await env.DB.prepare("SELECT ord, no, title FROM chapters WHERE ord < ? ORDER BY ord DESC LIMIT 1").bind(row.ord).first<any>();
@@ -929,6 +846,11 @@ export default {
 
     const ip = request.headers.get("CF-Connecting-IP") || "unknown";
 
+    if (request.method === "POST" && url.pathname.startsWith("/api/")) {
+      const blocked = guardPost(request, url);
+      if (blocked) return blocked;
+    }
+
     if (url.pathname === "/api/ask" && request.method === "POST") return handleAsk(request, env, ip);
     if (url.pathname === "/api/search" && request.method === "GET") return handleSearch(request, env, ip);
     if (url.pathname === "/api/health") return handleHealth(env);
@@ -978,6 +900,6 @@ export default {
       return json(whereFromEdge(request, url));
     }
 
-    return env.ASSETS.fetch(request);
+    return withPageHeaders(await env.ASSETS.fetch(request));
   },
 };

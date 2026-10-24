@@ -45,7 +45,9 @@
 ├── docs/                          # 参考资料
 └── cf-agent/                      # Worker 工程
     ├── src/
-    │   ├── index.ts               # 路由 + 校验 + 缓存 + 限流
+    │   ├── index.ts               # 路由 + 同源守卫 + 缓存 + 限流 + 安全头
+    │   ├── verify.ts              # 引文 / 书中条目校验（纯函数，有单测）
+    │   ├── util.ts                # 限时工具
     │   ├── retrieve.ts            # 关键词检索（唯一"检索"文件）
     │   ├── prompt.ts              # 提示词
     │   ├── vision.ts              # 图片识别
@@ -58,8 +60,10 @@
     │   ├── read.html              # 原文阅读器
     │   └── download/gaibian-jilu.pdf
     ├── scripts/build_chapters.py  # 生成 D1 导入 SQL
+    ├── scripts/make_headline.py   # 首页像素标题（Unifont）→ SVG path
     ├── data/chapters.sql          # 3.6MB
-    ├── tests/test_api.py          # 端到端测试
+    ├── tests/unit/                # 单元测试：校验、地理、联网、路由守卫（npm test）
+    ├── tests/test_api.py          # 端到端测试（打已部署站点）
     └── import.sh
 ```
 
@@ -106,7 +110,7 @@
 
 1. `refs` 必须落在 1..N
 2. `quote` 去掉标点后必须能在原文里逐字找到（支持省略号分段匹配）
-3. 建议文本要有 ≥50% 的词出现在所引原文里，否则标灰
+3. 书中条目（book）要和所引段落共享至少 **6 个连续汉字**（标点不计），否则标为「未能与原文逐字匹配」；四个字太常见，不能证明出处
 4. 一条可信引用都没有 → 强制降级「无依据」
 
 ### 图片
@@ -129,15 +133,16 @@
 
 ### 模型
 
-16 个 Workers AI 模型，前端下拉框分组：
+13 个模型（`src/models.ts`），前端下拉框分组。默认 Qwen 3.8 27B（Groq）：
 
-- **推荐**：Llama 3.3 70B（默认，最快）、Mistral Small 3.1、DeepSeek V4 Flash / V4.1 Flash
-- **中文强**：Qwen 3.8 27B、Kimi K2.6、GLM-4.7 Flash、DeepSeek V4 Pro、GLM-5.3 Flash
-- **快速**：Llama 4 Scout、GPT-OSS 20B、Nemotron 3 120B
-- **推理型**：Qwen3 30B、GPT-OSS 120B、GLM-5.3、Gemma 4 26B（会先思考，慢）
+- **推荐**：Qwen 3.8 27B（默认）、通义 Plus、通义 Turbo（易限流）
+- **智谱**：GLM-4 Flash、GLM-4 Flash 0414
+- **推理型**：GPT-OSS 20B / 120B、DeepSeek V4.1 Flash、GLM-4.5 Flash（会先思考，慢）
+- **兜底（Workers AI）**：Llama 3.3 70B、Mistral Small 3.1、DeepSeek V4 Flash、GLM-4.7 Flash
 
 推理型模型思考链也吃 token，预算不够会返回空内容；代码里检测 `finish=length`
-后自动翻倍预算重试，而不是直接判失败。整体 65s 预算，超了直接返回原文让用户自己看。
+后自动翻倍预算重试，而不是直接判失败。**一次问答共用 65 秒预算**：识图、检索、联网、
+所有兜底模型都算在内，超了直接返回检索到的原文让用户自己看。每把 key 也只在预算内轮换。
 
 ### 缓存 / 限流
 
@@ -170,7 +175,10 @@
 
 ## 三、前端
 
-**问答页** `/`
+**首屏** `/`：按 Hero 规格实现（视频、像素标题「卦象问道 / AI AGENT」、气泡、导航）。
+「开始问道」滚到问答区；「罗盘」「模型」「关于」「看它怎么找原文」用锚点打开对应层，罗盘只在点开时出现。
+
+**问答页** `/#ask`
 - 引用 chip 点击 → 展开对应原文并高亮
 - 「原文」链接 → 跳到阅读器对应章节+段落
 - 「延伸阅读」→ 本章其他相关章节
@@ -184,7 +192,23 @@
 
 ---
 
-## 四、部署 / 更新
+## 四、安全
+
+- 写接口（`/api/ask`、`/api/vision`、`/api/feedback`）只接受 `application/json` 且 Origin 与本站一致的请求，跨站页面发不出这种请求。
+- 页面带 CSP：脚本与样式只允许内联与同源，字体只放行 Google Fonts，视频只放行 CDN 域名；另有 `nosniff`、`Referrer-Policy: no-referrer`、`X-Frame-Options`。
+- 模型原始输出（可能含思维链）只写日志，不回传前端。
+- 联网结果只保留 http(s) 链接，不跟随搜索结果里的外链。
+
+## 五、测试
+
+```bash
+npm test            # 类型检查 + 单元测试（不联网）
+python3 tests/test_api.py https://<部署地址>   # 端到端：检索质量 / AI 忠实度 / 模型可用性
+```
+
+首页标题的像素字形由 `scripts/make_headline.py` 生成（Unifont 16×16 点阵，需要本机有该字体）。
+
+## 六、部署 / 更新
 
 ```bash
 cd cf-agent
@@ -205,7 +229,7 @@ wrangler deploy
 
 ---
 
-## 五、实测（2026-10-23）
+## 七、实测（2026-10-23）
 
 | 项 | 结果 |
 |---|---|
@@ -219,7 +243,7 @@ wrangler deploy
 
 ---
 
-## 六、说明
+## 八、说明
 
 - 内容来自公开网络连载，仅用于文化研读与民俗资料整理，不构成任何决策建议。
 - 书里没有的会明确回答「没有」，不编。

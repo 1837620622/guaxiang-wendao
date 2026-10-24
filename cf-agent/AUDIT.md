@@ -6,10 +6,10 @@
 
 | 级别 | 位置 | 问题 | 状态 |
 |---|---|---|---|
-| 高 | index.ts CORS/RateLimit | 无限流、无鉴权、CORS 全开，公网裸露付费 Workers AI | 待修 |
-| 高 | index.ts 缓存 key | KV key 不含模型，切模型命中旧答案，可缓存投毒 | 待修 |
-| 高 | prompt.ts / index.ts | 提示词注入 + conclusion/points/missing 零校验 | 待修 |
-| 高 | index.ts verifyQuote | 首尾 12 字匹配，中间可编造仍判 verified | 待修 |
+| 高 | index.ts CORS/RateLimit | 无限流、无鉴权、CORS 全开，公网裸露付费 Workers AI | 已修：限流按 IP（前序提交）；本次加同源 JSON 守卫，不回应预检，跨站表单发不出 |
+| 高 | index.ts 缓存 key | KV key 不含模型，切模型命中旧答案，可缓存投毒 | 已修：key 含模型与 topK（v30） |
+| 高 | prompt.ts / index.ts | 提示词注入 + conclusion/points/missing 零校验 | 部分缓解：自由文本限长并去协议；资料用 <资料> 标签包住；书中条目需 6 字锚点。模型输出的语义内容仍无校验 |
+| 高 | index.ts verifyQuote | 首尾 12 字匹配，中间可编造仍判 verified | 已修：只认整段逐字，或按省略号分段按序命中（verify.ts，有单测） |
 
 ## 中（摘要）
 - point.verified = refs.length > 0，语义错位
@@ -46,3 +46,28 @@
 - DOM XSS：esc() 覆盖，模型列表用 textContent
 - full 原文不外泄（sanitizeCitations）
 - 前端事件监听随节点回收
+
+## 修复记录（2026-10-24）
+
+已修（有单测，或已在本地 wrangler dev 上端到端验证）：
+
+- 联网搜索用 9 秒整体上限一刀切：慢源会让已经到手的结果一起丢掉 → 每源各自 8 秒限时（`websearch.ts`）
+- 模型兜底：每个模型各给一次 65 秒，最坏要等好几分钟 → 整次问答共用一个截止时间，key 轮换也受它约束（`index.ts`、`llm.ts`）
+- 书中条目校验过松：与原文共享四个字就标「已核对」→ 需共享 6 个连续汉字，标点不计（`verify.ts`）
+- `/api/geo?q=toString` 返回 500：普通对象查表拿到了原型链上的函数 → 只认自有属性（`geo.ts`）
+- `/api/chapter?no=&ord=5` 查成了 ord=0 → 参数按非空值取，章号必须是正整数，缓存键规范化
+- 失败响应回传模型原始输出（可能含思维链）→ 只写日志，不回传
+- 静态页面没有安全头，而且 Workers 默认直接返回静态文件、不进 Worker → `run_worker_first = true`，并补 CSP 等头
+- 写接口缺少来源与类型校验 → 只接受同源 `application/json`
+- 搜狗结果未校验链接协议 → 只保留 http(s)
+- 提示词写的是「<资料>」，实际输出的是「【资料】」→ 统一为 `<资料>` 标签
+- 首页与应用区样式、字体统一为单色体系，罗盘按需打开，八卦字转停后保持正立
+
+仍未处理（需要数据、部署环境，或更大的改动）：
+
+- 限流基于 KV 计数，不是原子操作，KV 最终一致，突发时会多放过少量请求。更稳的做法是 Workers 限流绑定或 Durable Object。
+- 检索的 `LIMIT 40` 预排序仍按出现次数，长章有优势。没有 919 章数据，无法验证调整后的效果，所以没动。
+- 模型输出的 conclusion、daily 没有语义校验，只有书中条目和引文会被核对。
+- CSP 的 `script-src` 允许 `'unsafe-inline'`，因为页面是内联脚本；改成 nonce 或 hash 需要构建步骤。
+- `tests/test_api.py` 仍只打印结果、没有断言，它需要打部署地址。
+

@@ -10,10 +10,13 @@
     "db:create": "wrangler d1 create guaxiang",
     "db:init": "bash import.sh",
     "db:init:local": "wrangler d1 execute guaxiang --local --file=./data/chapters.sql --yes",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:unit": "esbuild tests/unit/*.test.ts --bundle --platform=node --format=esm --outdir=.test-build --out-extension:.js=.mjs --log-level=warning && node --test .test-build/*.test.mjs",
+    "test": "npm run typecheck && npm run test:unit"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250109.0",
+    "esbuild": "^0.17.19",
     "typescript": "^5.7.2",
     "wrangler": "^3.101.0"
   }

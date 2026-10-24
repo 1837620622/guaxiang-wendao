@@ -9,7 +9,7 @@ export interface GeoInfo {
   name: string;
   lat: number;
   lon: number;
-  /** 相对北京时间的经度时差（分钟），负值表示当地更晚 */
+  /** 相对北京时间的经度时差（分钟）。负值表示当地比北京时间早，即在 120°E 以西。 */
   lonOffsetMin: number;
   /** 均时差（分钟） */
   eotMin: number;
@@ -212,8 +212,10 @@ export function resolveLocation(query: string): GeoInfo | null {
   let name: string | null = null;
   let coords: [number, number, string] | null = null;
 
-  if (CITIES[raw]) { name = raw; coords = CITIES[raw]; }
-  else if (CITIES[norm]) { name = norm; coords = CITIES[norm]; }
+  // 只认自有属性。直接写 CITIES[raw] 的话，"toString" 这类输入会拿到 Object.prototype 上的函数。
+  const known = (k: string) => (Object.hasOwn(CITIES, k) ? k : null);
+  const direct = known(raw) ?? known(norm);
+  if (direct) { name = direct; coords = CITIES[direct]; }
   else {
     // 包含匹配（"我在西安雁塔区" → 西安）
     for (const key of Object.keys(CITIES)) {
@@ -288,7 +290,8 @@ const EN_ALIAS: Record<string, string> = {
 /** Cloudflare 给的英文城市名，对上表内城市。对不上就返回空。 */
 export function resolveEnglishCity(name: string): GeoInfo | null {
   const key = name.trim().toLowerCase().replace(/\s+/g, " ");
-  const zh = EN_ALIAS[key] || EN_ALIAS[key.replace(/\s+/g, "")];
+  const alias = (k: string) => (Object.hasOwn(EN_ALIAS, k) ? EN_ALIAS[k] : undefined);
+  const zh = alias(key) ?? alias(key.replace(/\s+/g, ""));
   return zh ? resolveLocation(zh) : null;
 }
 

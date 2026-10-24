@@ -1,8 +1,9 @@
 /**
- * 联网搜索（无 key，双源：DuckDuckGo HTML + Bing）
+ * 联网搜索（无 key，三源：搜狗 / DuckDuckGo HTML / Bing）
  * 重点：中文站点编码混乱（UTF-8 / GBK / GB2312 / Big5），
  * 统一走 arrayBuffer + charset 探测 + 乱码回退，避免"锟斤拷"。
  */
+import { withTimeout } from "./util";
 
 export interface WebResult {
   title: string;
@@ -176,6 +177,8 @@ async function sogou(q: string, limit: number): Promise<WebResult[]> {
     if (!a) continue;
     let link = a[1];
     if (link.startsWith("/")) link = "https://www.sogou.com" + link;
+    // 只接受 http(s) 链接，别的协议（javascript:、data:）一律丢掉
+    if (!/^https?:\/\//i.test(link)) continue;
     const title = stripTags(a[2]);
     if (!title) continue;
     out.push({ title, snippet: "", url: link, source: "sogou" });
@@ -183,20 +186,18 @@ async function sogou(q: string, limit: number): Promise<WebResult[]> {
   return out;
 }
 
+/** 单个搜索源的时限。慢的源只会缺席，不拖住回答，也不连累已经回来的结果。 */
+const SOURCE_MS = 8000;
+
 /** 搜索：多源并发，失败互相兜底 */
-export async function webSearch(query: string, limit = 5): Promise<WebResult[]> {
-  const tasks = [
-    ddg(query, limit).catch(() => [] as WebResult[]),
-    bing(query, limit).catch(() => [] as WebResult[]),
-    sogou(query, limit).catch(() => [] as WebResult[]),
-  ];
-  // 整体 9s 上限：慢的源直接放弃，不拖住整个回答
-  const all = Promise.all(tasks);
-  const [a, b, c] = await Promise.race([
-    all,
-    new Promise<[WebResult[], WebResult[], WebResult[]]>((resolve) =>
-      setTimeout(() => resolve([[], [], []]), 9000)
-    ),
+export async function webSearch(query: string, limit = 5, sourceMs = SOURCE_MS): Promise<WebResult[]> {
+  // 以前是整体 9 秒一刀切：一个慢源会让 Promise.race 直接返回空数组，已经到手的结果也丢了。
+  const within = (p: Promise<WebResult[]>) =>
+    withTimeout(p, sourceMs, "search_timeout").catch(() => [] as WebResult[]);
+  const [c, a, b] = await Promise.all([
+    within(sogou(query, limit)),
+    within(ddg(query, limit)),
+    within(bing(query, limit)),
   ]);
   // 相关性过滤：标题/摘要里至少出现一个查询词，挡掉搜索引擎的"默认页/广告页"
   const qKeys: string[] = [];

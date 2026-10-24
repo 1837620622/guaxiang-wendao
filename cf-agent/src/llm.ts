@@ -13,6 +13,9 @@ const ENDPOINT: Record<Exclude<ModelInfo["provider"], "workers">, string> = {
 /** 同一隔离实例内轮询，429 / 失效密钥自动换下一把 */
 const cursor: Record<string, number> = { groq: 0, dashscope: 0, zhipu: 0 };
 
+/** 换下一把 key 至少还要留出的时间，不够就放弃，别把整个请求预算耗在一家身上 */
+const MIN_ATTEMPT_MS = 3000;
+
 export interface LlmOnce {
   text: string;
   finish: string;
@@ -69,7 +72,7 @@ async function postChat(
   timeoutMs: number
 ): Promise<{ status: number; data: any }> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), Math.max(3000, timeoutMs));
+  const timer = setTimeout(() => ctrl.abort(), Math.max(MIN_ATTEMPT_MS, timeoutMs));
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -92,6 +95,7 @@ async function postChat(
 /**
  * 调一家兼容接口。密钥轮询；json_object 被拒就去掉再试一次。
  * 404 直接抛出，让上层换模型，避免把同一把错误模型打满所有密钥。
+ * deadline 是整次请求的截止时刻：超过了就不再换钥匙、不再重试。
  */
 export async function runExternal(
   env: Env,
@@ -100,7 +104,8 @@ export async function runExternal(
   user: string,
   maxTokens: number,
   timeoutMs: number,
-  reasoning: boolean
+  reasoning: boolean,
+  deadline = Date.now() + timeoutMs
 ): Promise<LlmOnce> {
   const provider = providerOf(model);
   if (provider === "workers") throw new Error("not_external");
@@ -112,6 +117,8 @@ export async function runExternal(
   let lastStatus = 0;
 
   for (let n = 0; n < keys.length; n++) {
+    const left = deadline - Date.now();
+    if (left < MIN_ATTEMPT_MS) break;
     const idx = (start + n) % keys.length;
     const base: Record<string, unknown> = {
       model,
@@ -127,10 +134,11 @@ export async function runExternal(
     let attempt = reasoning ? base : { ...base, response_format: { type: "json_object" } };
     let status = 0;
     let data: any = {};
+    const cap = Math.min(timeoutMs, left);
     try {
-      ({ status, data } = await postChat(url, keys[idx], attempt, timeoutMs));
+      ({ status, data } = await postChat(url, keys[idx], attempt, cap));
       if (status === 400 && !reasoning) {
-        ({ status, data } = await postChat(url, keys[idx], base, timeoutMs));
+        ({ status, data } = await postChat(url, keys[idx], base, Math.min(timeoutMs, deadline - Date.now())));
       }
     } catch (e) {
       // 超时或断网：换下一把，不把整条模型链打断
