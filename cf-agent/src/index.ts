@@ -6,7 +6,7 @@ import { runExternal } from "./llm";
 import { resolveLocation, findLocationInText, listCities, geoPromptBlock, nearestCity, geoFromCoords, resolveEnglishCity } from "./geo";
 import { webSearch, webPromptBlock, type WebResult } from "./websearch";
 import { analyzeImage, base64ToBytes, imageKind, visionPromptBlock, MAX_BYTES, type VisionResult } from "./vision";
-import { extractJSON, verifyQuote, cleanText, clip, pointTouchesSource, scrubFakeChapter, searchText } from "./verify";
+import { extractJSON, verifyQuote, cleanText, clip, pointTouchesSource, scrubFakeChapter, searchText, polishProse, breakSentences } from "./verify";
 import { withTimeout } from "./util";
 
 const ALLOWED_MODELS = new Set(MODELS.map((m) => m.id));
@@ -244,9 +244,9 @@ function everydayFallback(question: string, lang: "zh" | "en" = "zh"): { conclus
     };
   }
   return {
-    conclusion: `「${topic}」对不上书中原文。先把相关的位置收拾到能走、能亮、能透气，再决定要不要摆东西。`,
+    conclusion: `${topic}，书里对不上。先把那个位置收拾到能走、能亮、能透气，再决定摆不摆东西。`,
     daily:
-      "这一段不是《改命记实录》里的话，是过日子时的收拾法，不能当成书中依据，也不必为此花钱。先站到你问的那个位置：纸箱、旧衣、坏电器和暂时不用的行李清走，留出能站下一个大人的空。白天让这里见光，窗帘不要整天拉死；有窗就开一条缝换气，没有窗就不要再堆东西挡着风口。通往这里的门、过道和柜门要开得全，家具不要顶死墙角。要放水景或鱼缸，先看楼板承重和会不会漏，没有把握就先不放。镜子不要正对着床头，也不要正对着房门。厨房看油烟能不能排出去，卫生间看潮气和异味，门扇坏了先修。做完这些，再回书里对原文；对不上的，就不要当成规矩去改结构、砸墙或买摆件。",
+      "这不是书里的话。先站到你问的那个位置，把纸箱、旧衣、坏电器和暂时不用的行李清走，留出能站下一个大人的空。白天让这里见光，窗帘不要整天拉死。有窗就开一条缝换气，没有窗就不要再堆东西挡着风口。通往这里的门、过道和柜门要开得全，家具不要顶死墙角。要放水景或鱼缸，先看楼板承重和会不会漏，没有把握就先不放。镜子不要正对着床头，也不要正对着房门。厨房看油烟能不能排出去，卫生间看潮气和异味，门扇坏了先修。做完这些再回书里对。对不上的，不要砸墙，也不必为此买摆件。",
     points: [
       { text: "先清出能站人的空。纸箱、坏电器和暂时不用的行李不要占着你问的这个位置。", refs: [], verified: false, kind: "daily" },
       { text: "这个位置要见光、能换气。门和过道不要被家具顶死，人要走得顺。", refs: [], verified: false, kind: "daily" },
@@ -298,7 +298,7 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
     imageBytes = bytes;
 
     // 整图哈希，避免头尾相同、中间不同的图共用一条识别
-    const imgKey = `vis:v2:${await hashBytes(bytes)}:${await hashKey(question.slice(0, 80))}`;
+    const imgKey = `vis:v3:${await hashBytes(bytes)}:${await hashKey(question)}`;
     if (env.CACHE) {
       try {
         const cached = await env.CACHE.get(imgKey, "json");
@@ -340,8 +340,9 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
     ? await hashKey(history.map((h: { q: string; a: string }) => `${h.q}|${h.a}`).join("\n"))
     : "-";
   const imgFp = imageBytes ? await hashBytes(imageBytes) : "-";
-  /* 结论也会删掉检索里没有的章号，旧缓存不能再当新答案。 */
-  const cacheKey = `v31:ask:${lang}:${primary}:${topK}:${geo ? geo.name : "-"}:${facing ?? "-"}:${fp}:${histFp}:${imgFp}`;
+  const dayStamp = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  /* 说话口气和检索词变了，当天已经缓存的旧答案不能再直接返回。 */
+  const cacheKey = `v34:ask:${dayStamp}:${lang}:${primary}:${topK}:${geo ? geo.name : "-"}:${facing ?? "-"}:${fp}:${histFp}:${imgFp}`;
   if (env.CACHE) {
     try {
       const hit: any = await env.CACHE.get(cacheKey, "json");
@@ -466,7 +467,9 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
       ? {
           question,
           verdict: "解析失败",
-          conclusion: "AI 暂时不可用，下面是检索到的原文，供你直接核对。",
+          conclusion: lang === "en"
+            ? "The model is unavailable. The passages found are listed below. Check them yourself."
+            : "模型暂时不可用。下面列出检索到的原文，请直接核对。",
           points: [],
           quotes: [],
           missing: "ai_unavailable",
@@ -474,6 +477,9 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
           elapsedMs: Date.now() - t0,
           model: usedModel,
           geo: geoOut,
+          sourceNote: lang === "en"
+            ? "The lines below are passages found in the book, not a conclusion written by the model."
+            : "下面是检索到的原文，不是模型写成的结论。",
         }
       : dailyOnly();
   } else if (!parsed) {
@@ -483,7 +489,9 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
       ? {
           question,
           verdict: "解析失败",
-          conclusion: "模型没有按要求返回结构化结果，下面是检索到的原文，请直接核对。",
+          conclusion: lang === "en"
+            ? "The model did not return a structured answer. The passages found are listed below. Check them yourself."
+            : "模型没有写成可核对的结果。下面列出检索到的原文，请直接核对。",
           points: [],
           quotes: [],
           missing: "",
@@ -491,6 +499,9 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
           elapsedMs: Date.now() - t0,
           model: usedModel,
           geo: geoOut,
+          sourceNote: lang === "en"
+            ? "The lines below are passages found in the book, not a conclusion written by the model."
+            : "下面是检索到的原文，不是模型写成的结论。",
         }
       : dailyOnly();
   } else {
@@ -506,7 +517,7 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
     const limits = { book: 5, daily: 4, web: 3 };
     if (Array.isArray(parsed.points)) {
       for (const p of parsed.points) {
-        const text0 = cleanText(p?.text, 360);
+        const text0 = polishProse(cleanText(p?.text, 360));
         if (!text0) continue;
         const refs = Array.isArray(p?.refs)
           ? p.refs
@@ -528,15 +539,13 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
           asked === "daily" || asked === "web" || asked === "book" ? asked : "book";
         if (kind !== "daily" && webRefs.length && bookRefs.length === 0) kind = "web";
         if (kind === "book" && bookRefs.length === 0) {
-          for (const c of cites) {
-            if (pointTouchesSource(text0, c.full || c.excerpt)) {
-              bookRefs = [c.n];
-              break;
-            }
-          }
+          bookRefs = cites
+            .filter((c) => pointTouchesSource(text0, c.full || c.excerpt))
+            .slice(0, 3)
+            .map((c) => c.n);
           if (bookRefs.length === 0) kind = "daily";
         }
-        let text = text0;
+        let text = scrubFakeChapter(text0, chapters);
         let verified = false;
         let outRefs: (number | string)[] = [];
         if (kind === "web") {
@@ -550,6 +559,14 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
             return src ? pointTouchesSource(text, src.full || src.excerpt) : false;
           });
           outRefs = bookRefs;
+          /* 六个字对得上，也不能把原文里没有的飞星、吉时写成书中做法。 */
+          const joined = bookRefs.map((r) => byRef.get(r)?.full || byRef.get(r)?.excerpt || "").join("\n");
+          const extra = text.match(/飞星|命卦|吉时|流年|开运/g) || [];
+          if (extra.some((w) => !joined.includes(w))) {
+            kind = "daily";
+            verified = false;
+            outRefs = [];
+          }
         }
         if (kind === "daily") {
           text = scrubFakeChapter(text, chapters);
@@ -599,8 +616,10 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
       if (conclusion.length < 20) conclusion = fb.conclusion;
       if (!missing) missing = lang === "en" ? "The book does not cover every step. Everyday practice is below." : "书中没写全的步骤，已按日常经验补在下面。";
     }
-    /* 结论里的章号必须落在这次检索到的章，否则删掉，避免写成书中引用。 */
-    conclusion = scrubFakeChapter(conclusion, chapters);
+    /* 结论里的章号必须落在这次检索到的章，否则删掉。说明文字再去掉 Markdown 和整段引号。 */
+    conclusion = breakSentences(scrubFakeChapter(conclusion, chapters));
+    dailyText = breakSentences(scrubFakeChapter(dailyText, chapters));
+    missing = polishProse(missing);
 
     const bookBacked = finalVerdict === "有依据" || finalVerdict === "部分依据";
     const hasDaily = Boolean(dailyText) || points.some((p) => p.kind === "daily");
@@ -611,10 +630,10 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
       else if (hasDaily) sourceNote = "Nothing in the book matches this. The notes below are everyday practice, not evidence from the book.";
       if (webLite.length) sourceNote = (sourceNote ? sourceNote + " " : "") + "Web snippets are listed apart and are not the book.";
     } else {
-      if (bookBacked && hasDaily) sourceNote = "对得上原文的写法已经标了章节。书里没写到的，另起一段日常经验，不要当成书里的话。";
-      else if (bookBacked) sourceNote = "下面的做法按检索到的原文来，原句可以展开核对。";
-      else if (hasDaily) sourceNote = "这条对不上书中原文。下面是日常经验，不是《改命记实录》里的依据。";
-      if (webLite.length) sourceNote = (sourceNote ? sourceNote + " " : "") + "联网内容单独列出，不能当成书中依据。";
+      if (bookBacked && hasDaily) sourceNote = "对得上书的，下面标了章节。另起的那一段是过日子的办法，不是书里的话。";
+      else if (bookBacked) sourceNote = "下面按书里的原来说。原句可以点开核对。";
+      else if (hasDaily) sourceNote = "这句话对不上书。下面是过日子的办法，不是《改命记实录》里的话。";
+      if (webLite.length) sourceNote = (sourceNote ? sourceNote + " " : "") + "网上的说法单独放着，不能当成书。";
     }
 
     resp = {
@@ -622,7 +641,8 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
       verdict: finalVerdict,
       conclusion,
       points,
-      quotes,
+      /* 对不上原文的引文不返回，避免被当成书中的话抄走。 */
+      quotes: quotes.filter((q) => q.verified),
       missing,
       daily: dailyText || undefined,
       citations: sanitizeCitations(cites),
@@ -636,7 +656,7 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
     };
   }
 
-  if (env.CACHE && resp.verdict !== "解析失败") {
+  if (env.CACHE && resp.verdict !== "解析失败" && webLite.length === 0) {
     try {
       await env.CACHE.put(cacheKey, JSON.stringify(resp), { expirationTtl: 86400 });
     } catch (e) {
@@ -911,7 +931,13 @@ async function dispatch(request: Request, env: Env): Promise<Response> {
       const q = (url.searchParams.get("q") ?? "").trim();
       if (!q) return json({ cities: listCities() });
       const g = resolveLocation(q);
-      return g ? json(g) : json({ error: "city_not_found", cities: listCities() }, 404);
+      if (!g) return json({ error: "city_not_found", cities: listCities() }, 404);
+      return json({
+        name: g.name,
+        region: g.region,
+        trueSolarOffsetMin: g.trueSolarOffsetMin,
+        declination: g.declination,
+      });
     }
     if (url.pathname === "/api/where" && request.method === "GET") {
       return json(whereFromEdge(request, url));

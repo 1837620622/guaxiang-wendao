@@ -24,6 +24,7 @@ export async function fetchTextSafe(url: string, timeoutMs = 6000): Promise<stri
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   try {
     for (let hop = 0; hop < 3; hop++) {
+      if (current.protocol !== "https:" || current.username || current.password) throw new Error("search_host");
       if (current.hostname !== first.hostname) throw new Error("search_host");
       const res = await fetch(current.href, {
         headers: {
@@ -40,7 +41,10 @@ export async function fetchTextSafe(url: string, timeoutMs = 6000): Promise<stri
         current = new URL(loc, current);
         continue;
       }
+      const announced = Number(res.headers.get("content-length") || 0);
+      if (announced > 1_500_000) return "";
       const buf = await res.arrayBuffer();
+      if (buf.byteLength > 1_500_000) return "";
       return decodeBuffer(buf, res.headers.get("content-type") || "");
     }
     throw new Error("search_redirect");

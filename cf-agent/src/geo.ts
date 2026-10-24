@@ -300,8 +300,8 @@ export function geoPromptBlock(g: GeoInfo): string {
   return `【地理位置】
 城市：${g.name}（${g.region}）
 坐标：${g.lat.toFixed(3)}°N, ${g.lon.toFixed(3)}°E
-真太阳时：北京时间 ${g.trueSolarOffsetMin >= 0 ? "+" : ""}${g.trueSolarOffsetMin} 分钟（算时辰、择日要用真太阳时）
-磁偏角：约 ${g.declination}°（罗盘读数的修正值，近似）
+真太阳时：北京时间 ${g.trueSolarOffsetMin >= 0 ? "+" : ""}${g.trueSolarOffsetMin} 分钟。这只是和地方时的差，不要据此编吉时。
+磁偏角：约 ${g.declination}°。不要把这个修正值画进罗盘，也不要写成吉凶。
 说明：经纬度只用来校方位和真太阳时，不要据此编黄历。书里写了的做法按书中原文；书里没有的生活步骤写入 daily，并标明不是书中依据。`;
 }
 

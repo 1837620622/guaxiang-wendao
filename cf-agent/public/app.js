@@ -77,7 +77,7 @@ const I18N = {
     q_ri_1:'今天风水要注意什么', q_ri_2:'搬家怎么选日子', q_ri_3:'今年哪个方位利财', q_ri_4:'开门见灶怎么看',
     welcome:'我是传康KK打造的一个智能风水大师。问宅、问方位、问日子：书里有原文的，按《改命记实录》写到第几章、第几段，原句能点开核对。\n\n书里没写到的，我另起一段日常做法，标明不是书里的话。\n\n城市用来校方位，图可以是户型或房间。对话只存在本机，清空即删。仅供消遣，不当决定。',
     v_有依据:'书中有依据', v_部分依据:'书中部分依据', v_无依据:'书中无据', v_解析失败:'没有写成',
-    sec_book:'书中做法', sec_weak:'这几句没能在原文里对上', sec_web:'网上的说法', sec_daily:'日常可以怎么做',
+    sec_conclusion:'结论', sec_book:'书中做法', sec_weak:'这几句没能在原文里对上', sec_web:'网上的说法', sec_daily:'日常可以怎么做', sec_found:'检索到的段落',
     daily_tag:'日常经验，不是《改命记实录》原文', quotes:'原文', more:'同题他章',
     copy:'复制', copied:'已抄', copy_note:'仅供消遣，不当决定。传康KK打造的智能风水大师，有据照《改命记实录》，书里没有的已标明不是原文。', back_q:'填回这句问法', useful:'有用', useless:'没用', next:'接着问', fb_thanks:'已记下，谢谢',
     seen:'图中所见', nosee:'图没认出：', miss:'书里没覆盖的：',
@@ -150,7 +150,7 @@ const I18N = {
     q_ri_1:'What should be watched today?', q_ri_2:'How to choose a moving day', q_ri_3:'Which direction favors money this year?', q_ri_4:'The stove is seen from the door',
     welcome:'I am an intelligent feng shui master built by Chuankang KK. Ask about the house, a direction, or a day. Where the book has a passage, the answer names the chapter and paragraph, and the Chinese sentence can be opened and checked.\n\nWhere the book is silent, I give a separate everyday note and say it is not a line from the book.\n\nThe city only sets direction, and a picture can be a plan or a room. Chats stay on this device until you clear them. For amusement, not a decision.',
     v_有依据:'In the book', v_部分依据:'Partly in the book', v_无依据:'Not in the book', v_解析失败:'Unstructured',
-    sec_book:'From the book', sec_weak:'These lines did not match the passage', sec_web:'From the web', sec_daily:'Everyday practice',
+    sec_conclusion:'Conclusion', sec_book:'From the book', sec_weak:'These lines did not match the passage', sec_web:'From the web', sec_daily:'Everyday practice', sec_found:'Passages found',
     daily_tag:'Everyday practice, not a line from the book', quotes:'Passage', more:'Other chapters',
     copy:'Copy', copied:'Copied', copy_note:'For amusement, not a decision. Built by Chuankang KK. Book lines are cited; anything else is marked as not from the book.', back_q:'Put this question back', useful:'Useful', useless:'Not useful', next:'Ask next', fb_thanks:'Noted, thank you.',
     seen:'Seen in the picture', nosee:'Picture not read: ', miss:'The book does not cover: ',
@@ -808,6 +808,15 @@ function addBot(d, quiet){
   const webPts=(d.points||[]).filter(p=>p.kind==='web');
   const dayPts=(d.points||[]).filter(p=>p.kind==='daily');
   let opened=false;
+  const retrieved=!((d.quotes||[]).length) ? (d.citations||[]).slice(0,4).map(c=>{
+    const ch=chapNo(c.ch), p0=chapNo(c.p0), p1=chapNo(c.p1);
+    const title=(c.title||'').replace(/^第\d+[章篇]?\s*/,'');
+    const where=LANG==='en'
+      ? 'Ch. '+(ch||'?')+' · ¶ '+(p0||'?')+'–'+(p1||'?')
+      : '第 '+(ch||'?')+' 章 · 第 '+(p0||'?')+'–'+(p1||'?')+' 段';
+    const openLink=ch?'<a class="open-orig" data-i18n="open" href="/read.html?ch='+ch+(p0?'&p='+p0:'')+'" target="_blank" rel="noopener">'+esc(t('open'))+'</a>':'';
+    return '<div class="retrieved"><div class="t">'+esc(title||t('sec_found'))+'</div><div class="p">'+esc(where)+'</div><div class="ex">'+esc(c.excerpt||'')+'</div>'+(openLink?'<div class="more">'+openLink+'</div>':'')+'</div>';
+  }).join('') : '';
   const quotes=(d.quotes||[]).map(qq=>{
     const c=(d.citations||[]).find(x=>x.n===qq.ref)||{};
     const title=(c.title||'').replace(/^第\d+[章篇]?\s*/,'');
@@ -834,7 +843,9 @@ function addBot(d, quiet){
   }
   const web=(d.web||[]).map(w=>{
     const href=safeHref(w.url);
-    return '<div class="webitem" id="w-'+esc(w.n)+'">'+(href?'<a href="'+esc(href)+'" target="_blank" rel="noopener">'+esc(w.title||w.n)+'</a>':'<b>'+esc(w.title||w.n)+'</b>')+'<div>'+esc(w.snippet||'')+'</div></div>';
+    let host='';
+    try{ host=href ? new URL(href).host.replace(/^www\./,'') : ''; }catch(err){ host=''; }
+    return '<div class="webitem" id="w-'+esc(w.n)+'">'+(href?'<a href="'+esc(href)+'" target="_blank" rel="noopener">'+esc(w.title||w.n)+'</a>':'<b>'+esc(w.title||w.n)+'</b>')+(host?'<span class="host">'+esc(host)+'</span>':'')+'<div>'+esc(w.snippet||'')+'</div></div>';
   }).join('');
   const offNum=d.geo && Number.isFinite(Number(d.geo.trueSolarOffsetMin)) ? Number(d.geo.trueSolarOffsetMin) : null;
   const geoTxt=offNum===null||!d.geo ? '' : (LANG==='en'
@@ -850,13 +861,13 @@ function addBot(d, quiet){
   const citeN=(d.quotes||[]).filter(q=>q.verified).length;
   const tag=(LANG==='en'?'Passages ':'已核对 ')+citeN+(d.cached?(LANG==='en'?' · cached':' · 缓存'):'');
   const speakBtn='speechSynthesis' in window ? '<button class="speak" type="button" data-speak data-i18n="speak">'+esc(t('speak'))+'</button>' : '';
-  /* 书里没有依据时，结论不再套成引文，避免把日常说成原文。 */
+  /* 结论是说明，不是原句。原句只放在下面的核对块里，不再套红引号。 */
   const plain=d.verdict==='无依据' || d.sourceLevel==='general' || d.sourceLevel==='web';
-  const quotesHtml=plain ? '' : '<span class="q">「</span>';
-  const quotesHtmlEnd=plain ? '' : '<span class="q">」</span>';
+  const quotesHtml='';
+  const quotesHtmlEnd='';
   const backBtn=d.question?'<button class="backq" type="button" data-i18n="back_q">'+esc(t('back_q'))+'</button>':'';
   const noteHtml=d.sourceNote?'<div class="note">'+esc(d.sourceNote)+'</div>':'';
-  const node=el('<div class="msg bot"><div class="avatar" aria-hidden="true">'+GX_AVATAR+'</div><div class="body"><div class="card"><div class="card-head"><span class="badge '+badgeCls(d.verdict)+'" data-v="'+esc(d.verdict||'')+'">'+esc(t('v_'+(d.verdict||''))||d.verdict||'—')+'</span><span class="tag" data-cites="'+citeN+'" data-cached="'+(d.cached?'1':'0')+'">'+esc(tag)+'</span><span class="spacer"></span>'+backBtn+speakBtn+'<button class="copybtn" type="button" data-i18n="copy">'+esc(t('copy'))+'</button></div><div class="conclusion">'+quotesHtml+'<span class="cw"></span>'+quotesHtmlEnd+'<span class="caret"></span></div>'+noteHtml+'<div class="card-rest">'+pointBlock(book,'sec_book')+pointBlock(weak,'sec_weak')+pointBlock(webPts,'sec_web')+(web?'<div class="quotes"><div class="quotes-title" data-i18n="sec_web">'+esc(t('sec_web'))+'</div>'+web+'</div>':'')+(d.vision&&d.vision.ok?'<div class="visionbox"><div class="vt" data-i18n="seen">'+esc(t('seen'))+'</div>'+esc(d.vision.text)+'</div>':'')+(d.vision&&!d.vision.ok?'<div class="missing"><b data-i18n="nosee">'+esc(t('nosee'))+'</b>'+esc(d.vision.error||'')+'</div>':'')+(d.missing && d.missing!=='ai_unavailable'?'<div class="missing"><b data-i18n="miss">'+esc(t('miss'))+'</b>'+esc(d.missing)+'</div>':'')+dailyHtml+(quotes?'<div class="quotes"><div class="quotes-title" data-i18n="quotes">'+esc(t('quotes'))+'</div>'+quotes+'</div>':'')+(links.length>1?'<div class="more"><span class="lab" data-i18n="more">'+esc(t('more'))+'</span>'+links.slice(0,5).join('')+'</div>':'')+(follows?'<div class="quotes-title" data-i18n="next">'+esc(t('next'))+'</div><div class="follows">'+follows+'</div>':'')+'<div class="meta"><span>'+esc(shortModel(d.model))+'</span>'+geoSpan+'<span class="sp"></span><button class="fb" type="button" data-vote="up" data-i18n="useful">'+esc(t('useful'))+'</button><button class="fb down" type="button" data-vote="down" data-i18n="useless">'+esc(t('useless'))+'</button><span class="fb-ack" aria-live="polite"></span><span>'+(d.elapsedMs||0)+' ms</span></div></div></div></div></div>');
+  const node=el('<div class="msg bot"><div class="avatar" aria-hidden="true">'+GX_AVATAR+'</div><div class="body"><div class="card"><div class="card-head"><span class="badge '+badgeCls(d.verdict)+'" data-v="'+esc(d.verdict||'')+'">'+esc(t('v_'+(d.verdict||''))||d.verdict||'—')+'</span><span class="tag" data-cites="'+citeN+'" data-cached="'+(d.cached?'1':'0')+'">'+esc(tag)+'</span><span class="spacer"></span>'+backBtn+speakBtn+'<button class="copybtn" type="button" data-i18n="copy">'+esc(t('copy'))+'</button></div><div class="conclusion">'+quotesHtml+'<span class="cw"></span>'+quotesHtmlEnd+'<span class="caret"></span></div>'+noteHtml+'<div class="card-rest">'+pointBlock(book,'sec_book')+pointBlock(weak,'sec_weak')+pointBlock(webPts,'sec_web')+(web?'<div class="quotes"><div class="quotes-title" data-i18n="sec_web">'+esc(t('sec_web'))+'</div>'+web+'</div>':'')+(d.vision&&d.vision.ok?'<div class="visionbox"><div class="vt" data-i18n="seen">'+esc(t('seen'))+'</div>'+esc(d.vision.text)+'</div>':'')+(d.vision&&!d.vision.ok?'<div class="missing"><b data-i18n="nosee">'+esc(t('nosee'))+'</b>'+esc(d.vision.error||'')+'</div>':'')+(d.missing && d.missing!=='ai_unavailable'?'<div class="missing"><b data-i18n="miss">'+esc(t('miss'))+'</b>'+esc(d.missing)+'</div>':'')+(retrieved?'<div class="quotes"><div class="quotes-title" data-i18n="sec_found">'+esc(t('sec_found'))+'</div>'+retrieved+'</div>':'')+dailyHtml+(quotes?'<div class="quotes"><div class="quotes-title" data-i18n="quotes">'+esc(t('quotes'))+'</div>'+quotes+'</div>':'')+(links.length>1?'<div class="more"><span class="lab" data-i18n="more">'+esc(t('more'))+'</span>'+links.slice(0,5).join('')+'</div>':'')+(follows?'<div class="quotes-title" data-i18n="next">'+esc(t('next'))+'</div><div class="follows">'+follows+'</div>':'')+'<div class="meta"><span>'+esc(shortModel(d.model))+'</span>'+geoSpan+'<span class="sp"></span><button class="fb" type="button" data-vote="up" data-i18n="useful">'+esc(t('useful'))+'</button><button class="fb down" type="button" data-vote="down" data-i18n="useless">'+esc(t('useless'))+'</button><span class="fb-ack" aria-live="polite"></span><span>'+(d.elapsedMs||0)+' ms</span></div></div></div></div></div>');
   const rest=node.querySelector('.card-rest');
   const showRest=()=>{ if(rest) rest.classList.add('in'); };
   const cw=node.querySelector('.cw');
@@ -879,7 +890,9 @@ function addBot(d, quiet){
       if(target.tagName==='DETAILS') target.open=true;
       node.querySelectorAll('details.q').forEach(x=>x.classList.remove('hl'));
       target.classList.add('hl');
-      target.scrollIntoView({behavior:reduceMotion?'auto':'smooth',block:'center'});
+      const box=main.getBoundingClientRect();
+      const rect=target.getBoundingClientRect();
+      main.scrollTop += rect.top - box.top - 8;
     });
   });
   node.querySelectorAll('.follows button').forEach(b=>{
@@ -890,10 +903,29 @@ function addBot(d, quiet){
   const cb=node.querySelector('.copybtn');
   cb.addEventListener('click',async()=>{
     const lines=[];
-    if(d.conclusion) lines.push(d.conclusion);
-    (d.points||[]).forEach((p,i)=>lines.push((i+1)+'. '+(p.kind==='daily'?'['+t('sec_daily')+'] ':'')+p.text));
-    if(d.daily) lines.push('\n'+t('daily_tag')+'\n'+d.daily);
-    (d.quotes||[]).forEach(x=>lines.push('['+x.ref+'] '+(x.verified?'':'['+t('unchecked')+'] ')+x.quote));
+    if(d.sourceNote) lines.push(d.sourceNote);
+    if(d.conclusion) lines.push(t('sec_conclusion')+'\n'+d.conclusion);
+    const bookPts=(d.points||[]).filter(p=>p.kind==='book' && p.verified);
+    const dayCopy=(d.points||[]).filter(p=>p.kind==='daily');
+    const webCopy=(d.points||[]).filter(p=>p.kind==='web');
+    const weakCopy=(d.points||[]).filter(p=>p.kind!=='daily' && p.kind!=='web' && !p.verified);
+    const pushList=(title, list)=>{
+      if(!list.length) return;
+      lines.push('\n'+title);
+      list.forEach((p,i)=>lines.push((i+1)+'. '+p.text));
+    };
+    pushList(t('sec_book'), bookPts);
+    if(d.daily || dayCopy.length){
+      lines.push('\n'+t('daily_tag'));
+      if(d.daily) lines.push(d.daily);
+      dayCopy.forEach((p,i)=>lines.push((i+1)+'. '+p.text));
+    }
+    pushList(t('sec_web'), webCopy);
+    pushList(t('sec_weak'), weakCopy);
+    (d.quotes||[]).forEach(x=>lines.push('['+x.ref+'] '+x.quote));
+    if(!(d.quotes||[]).length){
+      (d.citations||[]).slice(0,4).forEach(c=>lines.push('['+(c.n||'')+'] '+(c.title||'')+'\n'+(c.excerpt||'')));
+    }
     lines.push('\n'+t('copy_note'));
     try{
       await navigator.clipboard.writeText(lines.join('\n'));

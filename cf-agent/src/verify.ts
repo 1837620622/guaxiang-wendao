@@ -21,6 +21,44 @@ export function cleanText(s: unknown, max: number): string {
     .replace(/data\s*:\s*text\/html/gi, "");
 }
 
+/**
+ * 模型常把 Markdown、整段引号和列表符写进结论。
+ * 只用于说明文字，不能用于必须逐字核对的引文。
+ */
+export function polishProse(s: string): string {
+  let t = s
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/\*\*|__|~~/g, "")
+    .replace(/`([^`]*)`/g, "$1")
+    .replace(/^\s*[-*•]\s+/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+  /* 只剥句首客套。后面必须有逗号或冒号，避免把「最后才看镜子」切坏。 */
+  t = t.replace(
+    /(^|[。！？\n])[ \t]*(综上所述|总的来说|总而言之|值得注意的是|需要指出的是|需要指出|不难发现|从某种意义上说|从某种意义上|希望这对你有帮助|希望对你有帮助|让我们|首先|其次|最后)[，,：:][ \t]*/g,
+    "$1"
+  ).trim();
+  if ((t.startsWith("「") && t.endsWith("」")) || (t.startsWith("“") && t.endsWith("”"))) {
+    t = t.slice(1, -1).trim();
+  }
+  return t;
+}
+
+/** 长段说明按句换行，短句和已经分段的文字保持原样。 */
+export function breakSentences(s: string): string {
+  const t = polishProse(s);
+  if (t.includes("\n") || t.length < 36) return t;
+  const han = (t.match(/[一-鿿]/g) || []).length;
+  const parts = (han >= 8 ? t.split(/(?<=[。！？])/) : t.split(/(?<=[.!?])\s+/))
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return t;
+  return parts.join("\n");
+}
+
 /** 从模型输出里抠出含 verdict 的 JSON 对象 */
 export function extractJSON(text: string): any | null {
   if (!text) return null;
@@ -101,12 +139,32 @@ export function pointTouchesSource(text: string, hay: string): boolean {
   return false;
 }
 
+function foldDigits(s: string): string {
+  return s.replace(/[０-９]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 0x30));
+}
+
+/** 只认到九十九，够删掉「第十二章」这类假章号。 */
+function cnToInt(raw: string): number | null {
+  const d: Record<string, number> = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+  if (raw === "十") return 10;
+  const m = raw.match(/^([一二三四五六七八九两])?十([一二三四五六七八九])?$/);
+  if (m) return (m[1] ? d[m[1]] : 1) * 10 + (m[2] ? d[m[2]] : 0);
+  if (raw.length === 1 && raw in d) return d[raw];
+  return null;
+}
+
 /** 日常段里冒出资料中不存在的章号时删掉，避免被看成书中引用。 */
 export function scrubFakeChapter(text: string, chapters: Set<number>): string {
-  return text
-    .replace(/第\s*(\d+)\s*章(?:《[^》]{0,40}》)?(?:第\s*\d+\s*[–\-到至]\s*\d+\s*段)?/g, (all, n) =>
+  const chapterTail = "(?:《[^》]{0,40}》)?(?:第\\s*[0-9零〇一二三四五六七八九十两]+\\s*(?:[–\\-到至]\\s*[0-9零〇一二三四五六七八九十两]+\\s*)?段)?";
+  return foldDigits(text)
+    .replace(new RegExp("第\\s*(\\d+)\\s*章" + chapterTail, "g"), (all, n) =>
       chapters.has(Number(n)) ? all : ""
     )
+    .replace(new RegExp("第\\s*([零〇一二三四五六七八九十两]{1,3})\\s*章" + chapterTail, "g"), (all, raw) => {
+      const n = cnToInt(raw);
+      return n !== null && chapters.has(n) ? all : "";
+    })
+    .replace(/\b(?:chapter|ch\.)\s*(\d+)\b/gi, (all, n) => (chapters.has(Number(n)) ? all : ""))
     .replace(/[ \t]{2,}/g, " ")
     .trim();
 }

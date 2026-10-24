@@ -28,7 +28,9 @@ const ENTITY = [
   "卫生间", "厕所", "马桶", "客厅", "厅堂", "阳台", "书房", "院子", "院内", "中宫",
   "镜子", "横梁", "鱼缸", "挂钟", "画像", "照片", "神像", "菩萨", "佛像", "财神",
   "貔貅", "水晶", "绿植", "植物", "楼梯", "罗盘", "五帝钱", "葫芦",
-  "风水", "方位", "布局", "摆放", "煞气", "化煞", "文昌位", "吉日", "择日",
+  "风水", "方位", "方向", "朝向", "坐向", "布局", "摆放", "沙发", "门槛",
+  "东南", "东北", "西南", "西北", "正东", "正南", "正西", "正北", "东方", "西方", "南方", "北方",
+  "煞气", "化煞", "文昌位", "吉日", "择日",
   "太岁", "九宫", "飞星", "八卦", "五行", "阴阳", "八字", "命宫", "太极",
   "婚姻", "姻缘", "离婚", "孩子", "学习", "考试", "事业", "升职", "健康",
   "装修", "搬家", "买房", "禁忌", "忌讳", "常见问题",
@@ -37,16 +39,18 @@ const ENTITY = [
 /** 场景同义词：问法 ≠ 书里的说法时做扩展 */
 const SYNONYM: [RegExp, string[]][] = [
   [/厨房|灶/, ["灶", "炉灶", "灶台", "厨房", "水火冲"]],
-  [/卧室|睡房|床/, ["床", "床头", "卧室", "卧房", "睡觉"]],
-  [/卫生|厕/, ["厕所", "卫生间", "马桶", "污秽"]],
-  [/大门|门口|入户|玄关/, ["大门", "门口", "门向"]],
-  [/客厅|厅堂/, ["客厅", "厅堂", "明堂", "沙发"]],
-  [/财|钱|富/, ["财", "招财", "聚财", "财运", "财气", "破财", "漏财", "财库"]],
+  [/卧室|睡房|睡觉|床/, ["床", "床头", "卧室", "卧房", "睡觉"]],
+  [/卫生|厕|洗手间|茅房|浴室/, ["厕所", "卫生间", "马桶", "污秽"]],
+  [/大门|门口|入户|玄关|进门|门槛/, ["大门", "门口", "门向", "门槛"]],
+  [/客厅|厅堂|沙发/, ["客厅", "厅堂", "明堂", "沙发"]],
+  [/布置|摆放|怎么摆/, ["摆放", "布局"]],
+  [/破财|漏财/, ["破财", "漏财"]],
+  [/财|钱|富/, ["财位", "招财", "聚财", "财运", "财气", "财库"]],
   [/镜子|反光/, ["镜子", "反光", "镜"]],
   [/横梁|压顶/, ["横梁", "压顶", "横梁煞"]],
   [/文昌|考试|学习/, ["文昌", "文昌位", "考运"]],
   [/择日|吉日|日子/, ["择日", "吉日", "日子", "黄历"]],
-  [/方位|朝向|坐向/, ["方位", "朝向", "坐向", "九宫", "宫位"]],
+  [/方位|朝向|坐向/, ["方位", "朝向", "坐向"]],
   [/煞/, ["煞", "煞气", "化煞", "形煞"]],
   [/禁忌|忌讳|注意什么|有啥讲究/, ["禁忌", "不宜", "不可", "主凶", "大凶", "破财"]],
   [/装修|搬家|买房/, ["装修", "搬家", "买房", "选房"]],
@@ -64,19 +68,25 @@ export function extractKeywords(question: string): string[] {
     if (re.test(question)) out.push(...words);
   }
 
-  // 3) 问题里的 2 字以上中文片段（兜底）
+  /* 已经有书里的词时，不再把整句切成两字碎片，免得「的财」「位怎」把别的章检索进来。 */
+  const specific = out.filter((w) => w.length >= 2);
+  /* 的、了、怎么、这、那 这类字组成的两字，不是书里的说法。 */
+  const glue = /[的了吗呢吧啊呀哦嘛是有在和与或被把给到从对为就都还又也很最更不没无会能可要想这那什怎哪么办]/;
   for (const seg of question.match(/[\u4e00-\u9fff]{2,}/g) || []) {
+    if (specific.length > 0) continue;
     if (seg.length <= 4 && !STOP.has(seg)) out.push(seg);
     else {
       for (let i = 0; i + 2 <= seg.length; i++) {
         const g = seg.slice(i, i + 2);
-        if (!STOP.has(g)) out.push(g);
+        if (STOP.has(g) || glue.test(g)) continue;
+        out.push(g);
       }
     }
   }
 
-  // 长词优先，去重
-  const uniq = [...new Set(out)];
+  /* 单字若已经包含在更长的原词里，就丢掉。单字「财」会命中几乎每一章。 */
+  let uniq = [...new Set(out)];
+  uniq = uniq.filter((w) => w.length >= 2 || !uniq.some((other) => other.length > w.length && other.includes(w)));
   uniq.sort((a, b) => b.length - a.length);
   return uniq.slice(0, 16);
 }
@@ -109,9 +119,10 @@ export async function retrieve(env: Env, question: string, topK = 6): Promise<Se
   const whereSql = kws.map(() => "body LIKE ?").join(" OR ");
   const whereParams = kws.map((k) => `%${k}%`);
 
-  // 用 LENGTH 差值算每章各词出现次数，加权求和后排序
+  /* 长词权重大。单字「财」不能压过「财位」「床头」。 */
+  const kwWeight = (k: string) => (k.length >= 4 ? 3 : k.length === 3 ? 2.2 : k.length === 2 ? 1.2 : 0.25);
   const scoreExpr = kws
-    .map((k, i) => `(LENGTH(body) - LENGTH(REPLACE(body, ?, ''))) * ${(1 / Math.max(k.length, 1)).toFixed(3)} * ${(1 + i * 0.05).toFixed(2)}`)
+    .map((k) => `((LENGTH(body) - LENGTH(REPLACE(body, ?, ''))) / ${Math.max(k.length, 1)}) * ${kwWeight(k).toFixed(2)}`)
     .join(" + ");
   const scoreParams = kws;
 
@@ -154,8 +165,9 @@ export async function retrieve(env: Env, question: string, topK = 6): Promise<Se
       for (const k of kws) {
         const n = countOcc(p, k);
         if (n > 0) {
-          s += 1 + Math.min(n, 4) * 0.5;
-          if (k.length >= 2 && ENTITY.includes(k)) s += 0.6;
+          const long = k.length >= 2;
+          s += (long ? 2 : 0.25) + Math.min(n, 3) * (long ? 0.4 : 0.05);
+          if (long && ENTITY.includes(k)) s += 1.2;
         }
       }
       if (s > bestScore) {
@@ -195,16 +207,21 @@ export async function retrieve(env: Env, question: string, topK = 6): Promise<Se
     if ((perChapter.get(r.row.no) ?? 0) >= 2) continue;
 
     // 本章按段落分排序，取前 2
+    const hasLong = kws.some((k) => k.length >= 2);
     const order = r.paras
       .map((text, idx) => {
         let s = 0;
+        let long = 0;
         for (const k of kws) {
           const n = countOcc(text, k);
-          if (n > 0) s += 1 + Math.min(n, 4) * 0.5;
+          if (n > 0) {
+            s += 1 + Math.min(n, 4) * 0.5;
+            if (k.length >= 2) long += n;
+          }
         }
-        return { idx, text, s };
+        return { idx, text, s, long };
       })
-      .filter((p) => p.s > 0)
+      .filter((p) => p.s > 0 && (!hasLong || p.long > 0))
       .sort((a, b) => b.s - a.s)
       .slice(0, 2);
 
@@ -215,7 +232,8 @@ export async function retrieve(env: Env, question: string, topK = 6): Promise<Se
       seen.add(key);
 
       const nextPara = r.paras[p.idx + 1];
-      const join = nextPara && nextPara.length < 100;
+      const nextHits = !!nextPara && kws.some((k) => k.length >= 2 && nextPara.includes(k));
+      const join = nextHits && nextPara.length < 100;
       const text = join ? `${p.text}\n${nextPara}` : p.text;
       if (text.length < 10) continue;
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { verifyQuote, pointTouchesSource, scrubFakeChapter, extractJSON, searchText, cleanText } from "../../src/verify";
+import { verifyQuote, pointTouchesSource, scrubFakeChapter, extractJSON, searchText, cleanText, polishProse, breakSentences } from "../../src/verify";
 
 const BOOK = "床头不要对着门，床尾也不宜冲窗。\n厨房灶台不要正对卫生间的门，水火相冲。\n镜子不宜正对床头。";
 
@@ -39,6 +39,9 @@ test("书中做法：共享六个连续汉字才算出处，标点不打断", ()
 test("日常段里不存在的章号会被删掉", () => {
   const chapters = new Set([3, 12]);
   assert.equal(scrubFakeChapter("见第3章的说法，别信第999章。", chapters), "见第3章的说法，别信。");
+  assert.equal(scrubFakeChapter("别信第３章第1段。", new Set([9])), "别信。");
+  assert.equal(scrubFakeChapter("见第十二章。", new Set([3])), "见。");
+  assert.equal(scrubFakeChapter("见第十二章。", new Set([12])), "见第十二章。");
 });
 
 test("extractJSON 从前后有废话的输出里取出含 verdict 的对象", () => {
@@ -51,6 +54,19 @@ test("英文提问的方位词按整词匹配，southeast 不会被拆成正东"
   const out = searchText("southeast corner", "en");
   assert.match(out, /巽 东南/);
   assert.doesNotMatch(out, /震 东/);
+});
+
+test("说明文字去掉 Markdown 和整段引号，引文清理不走这条", () => {
+  assert.equal(polishProse("**先挪床**\n- 不要砸墙"), "先挪床\n不要砸墙");
+  assert.equal(polishProse("「书里没写到。」"), "书里没写到。");
+  assert.equal(polishProse("综上所述，先挪床。值得注意的是，别砸墙。"), "先挪床。别砸墙。");
+  assert.equal(polishProse("最后才看镜子。"), "最后才看镜子。");
+});
+
+test("长结论按句换行，短句保持一行", () => {
+  const long = "书里写到床头不要对着门，这是能对上的判断。先把床挪开，让床头离开房门的正对位置。";
+  assert.equal(breakSentences(long), "书里写到床头不要对着门，这是能对上的判断。\n先把床挪开，让床头离开房门的正对位置。");
+  assert.equal(breakSentences("先挪床。"), "先挪床。");
 });
 
 test("cleanText 去掉危险协议并限长", () => {
