@@ -1,21 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-首页「卦先生」像素立绘。
+首页「卦先生」像素立绘（Q 版）。
 
-用格子描述轮廓，生成 SVG 路径：
-  c 道冠（实心）      f 脸（只画外轮廓，里面透出底色）
-  r 道袍（实心）      b 胡须（只画外轮廓，单独一层，会轻轻摆动）
-  m 眉、鼻、口（实心小笔画）
-  e 眼睛（单独一层，眨眼时隐去）   L 眼皮（只在眨眼时显示）
-  l 罗盘（单独一层，会轻微起伏）  t 符纸（三张，单独成组，会漂浮）
+每一行用「字符 × 个数」描述，从左到右：
+  c 道冠（实心）                 r 道袍（实心）
+  m 眉、腮红、嘴（实心小笔画）     f 脸（只画外轮廓，里面透出底色）
+  h 眼睛上的高光（透出底色）       e 眼睛（单独一层，眨眼时隐去）
+  b 胡须（只画外轮廓，单独一层，会轻轻摆动）
+  l 罗盘（单独一层，会轻微起伏）   t 符纸（三张，单独成组，会漂浮）
+  . 透出底色
 
 格子单位：立绘 48×52 格。页面里用 transform 放大到 1920×1080 的舞台上，
-每格 14 个舞台单位。
+每格 14 个舞台单位。头占上半身，身子短，眼睛和嘴是主要的脸部信息。
 
 用法：
   python3 scripts/make_master.py              打印 ASCII 预览
-  python3 scripts/make_master.py --write      写进 public/index.html 的标记之间
+  python3 scripts/make_master.py --write      写进 public/index.html 和 public/app.js 的标记之间
   python3 scripts/make_master.py --png out.png  输出 PNG 预览（需要 Pillow）
 """
 import random
@@ -25,50 +26,59 @@ from pathlib import Path
 
 W, H = 48, 52
 FRAME_W, FRAME_H = 1920, 1080   # 舞台坐标（与 viewBox 一致）
-FIG_X, FIG_Y, CELL = 1100, 200, 14   # 立绘左上角与每格大小（舞台单位）
-ANCHOR_CELL = (25.5, 3.0)       # 气泡尾巴指向的格子：卫道冠的右上方
-OX = 3  # 基础坐标以 x=19.5 为中线，整体右移 3 格，中线到 22.5
+FIG_X, FIG_Y, CELL = 1000, 200, 14   # 立绘左上角与每格大小（舞台单位）
+ANCHOR_CELL = (25.5, 3.0)       # 气泡尾巴指向的格子：道冠顶部偏右
 
-# ---------- 区域（基础坐标：y, x0, x1，闭区间） ----------
-CAP = [(0, 17, 22), (1, 16, 23), (2, 15, 24), (3, 14, 25), (4, 11, 28), (5, 9, 30)]
-FACE = [(y, 12, 27) for y in range(6, 14)] + [(14, 13, 26)]
-BEARD = [
-    (15, 14, 25), (16, 14, 25), (17, 14, 25), (18, 14, 25),
-    (19, 15, 24), (20, 15, 24), (21, 15, 24), (22, 15, 24),
-    (23, 16, 23), (24, 16, 23), (25, 16, 23),
-    (26, 17, 22), (27, 17, 22), (28, 18, 21), (29, 18, 21),
-    (30, 19, 20), (31, 19, 20),
+# 每行从左到右的段：(字符, 格数)。每行合计必须是 W。
+ROWS = [
+    [(".", 18), ("c", 12), (".", 18)],                                  # 0 道冠
+    [(".", 16), ("c", 16), (".", 16)],                                  # 1
+    [(".", 15), ("c", 18), (".", 15)],                                  # 2
+    [(".", 14), ("c", 20), (".", 14)],                                  # 3
+    [(".", 12), ("c", 24), (".", 12)],                                  # 4
+    [(".", 10), ("c", 28), (".", 10)],                                  # 5 帽檐
+    [(".", 15), ("f", 18), (".", 15)],                                  # 6 脸顶
+    [(".", 13), ("f", 22), (".", 13)],                                  # 7
+    [(".", 12), ("f", 24), (".", 12)],                                  # 8
+    [(".", 12), ("f", 24), (".", 12)],                                  # 9
+    [(".", 12), ("f", 4), ("m", 3), ("f", 10), ("m", 3), ("f", 4), (".", 12)],   # 10 眉
+    [(".", 12), ("f", 24), (".", 12)],                                  # 11
+    [(".", 12), ("f", 24), (".", 12)],                                  # 12
+    [(".", 12), ("f", 4), ("e", 1), ("h", 1), ("f", 12), ("h", 1), ("e", 1), ("f", 4), (".", 12)],  # 13 眼顶
+    [(".", 12), ("f", 4), ("e", 2), ("f", 12), ("e", 2), ("f", 4), (".", 12)],  # 14 眼
+    [(".", 12), ("f", 4), ("e", 2), ("f", 12), ("e", 2), ("f", 4), (".", 12)],  # 15 眼
+    [(".", 12), ("f", 2), ("m", 2), ("f", 16), ("m", 2), ("f", 2), (".", 12)],  # 16 腮红
+    [(".", 12), ("f", 10), ("m", 1), ("f", 2), ("m", 1), ("f", 10), (".", 12)],  # 17 嘴角
+    [(".", 12), ("f", 11), ("m", 2), ("f", 11), (".", 12)],                     # 18 嘴
+    [(".", 12), ("f", 24), (".", 12)],                                  # 19 下巴
+    [(".", 13), ("f", 22), (".", 13)],                                  # 20
+    [(".", 15), ("f", 4), ("b", 10), ("f", 4), (".", 15)],              # 21 胡须起
+    [(".", 18), ("f", 1), ("b", 10), ("f", 1), (".", 18)],              # 22
+    [(".", 19), ("b", 10), (".", 19)],                                  # 23
+    [(".", 20), ("b", 8), (".", 20)],                                   # 24
+    [(".", 17), ("r", 4), ("b", 6), ("r", 4), (".", 17)],               # 25 肩
+    [(".", 15), ("r", 7), ("b", 4), ("r", 7), (".", 15)],               # 26
+    [(".", 13), ("r", 10), ("b", 2), ("r", 10), (".", 13)],             # 27
+    [(".", 11), ("r", 26), (".", 11)],                                  # 28
+    [(".", 10), ("r", 1), (".", 1), ("r", 24), (".", 1), ("r", 1), (".", 10)],  # 29 袖口缝
+    [(".", 9), ("r", 2), (".", 1), ("r", 24), (".", 1), ("r", 2), (".", 9)],    # 30
+] + [
+    [(".", 8), ("r", 3), (".", 1), ("r", 24), (".", 1), ("r", 3), (".", 8)]     # 31-37 袖子
+    for _ in range(31, 38)
+] + [
+    [(".", 48)],                                                        # 38 腰带透缝
+] + [
+    [(".", 7), ("r", 34), (".", 7)] for _ in range(39, 45)              # 39-44 道袍
+] + [
+    [(".", 6), ("r", 36), (".", 6)] for _ in range(45, 52)              # 45-51 下摆
 ]
-ROBE = [
-    (18, 9, 13), (18, 26, 30),
-    (19, 8, 13), (19, 26, 31),
-    (20, 7, 13), (20, 26, 32),
-    (21, 6, 14), (21, 25, 33),
-    (22, 5, 14), (22, 25, 34),
-    (23, 5, 15), (23, 24, 34),
-    (24, 4, 15), (24, 24, 35),
-    (25, 4, 15), (25, 24, 35),
-    (26, 4, 16), (26, 23, 35),
-    (27, 4, 16), (27, 23, 35),
-    (28, 4, 17), (28, 22, 35),
-    (29, 4, 17), (29, 22, 35),
-    (30, 4, 18), (30, 21, 35),
-    (31, 4, 18), (31, 21, 35),
-] + [(y, 4, 35) for y in range(32, 45)] + [(y, 3, 36) for y in range(45, 52)]
-SASH = [(40, 4, 35)]                       # 腰间丝绦：一道透出底色的横线
-FOLDS = []                                 # 不画褶：两道竖线会把下摆切成三根柱子
+assert len(ROWS) == H, len(ROWS)
 
-BROWS = [(7, 14, 16), (7, 23, 25)]
-NOSE = [(11, 19, 20)]
-MOUTH = [(13, 18, 21)]
-EYES = [(8, 15, 16), (9, 15, 16), (8, 23, 24), (9, 23, 24)]
-LIDS = [(9, 15, 16), (9, 23, 24)]          # 眨眼时才显示的眼皮（不写进格子，避免覆盖眼睛）
+LID_CELLS = [(16, 14), (17, 14), (30, 14), (31, 14)]   # 眨眼时才显示的眼皮（闭眼线）
 
-LUO_C = (12, 34)                           # 罗盘圆心（最终坐标）
+LUO_C = (14, 44)                           # 罗盘圆心（格子坐标）
 LUO_R2 = 4.8 * 4.8                         # 外半径²
 LUO_HALO2 = 6.3 * 6.3                      # 罗盘周围让出的空隙
-WHISK_HANDLE = [(36, 36), (37, 33), (38, 30), (39, 27), (39, 24), (40, 21), (41, 19)]
-WHISK_FLUFF = (41, 13, 3.3, 4.3)          # 拂尘头：中心 x, y，半宽、半高
 
 TAL_SHAPE = [
     "#####",
@@ -80,14 +90,10 @@ TAL_SHAPE = [
     "#...#",
     "#####",
 ]
-TALS = [(43, 5), (43, 19), (43, 33)]       # 三张符纸左上角（最终坐标，右侧让出拂尘）
+TALS = [(39, 6), (41, 17), (41, 30)]       # 三张符纸左上角（格子坐标，都在身体之外）
 
-
-def cells_of(spans):
-    out = []
-    for y, x0, x1 in spans:
-        out += [(x + OX, y) for x in range(x0, x1 + 1)]
-    return out
+FACE_LETTERS = "fhem"                      # 脸的区域：外轮廓由它们的边界决定
+BODY_LETTERS = "crm"                       # 实心的部分（道冠、道袍、眉嘴腮红）
 
 
 def line_cells(x0, y0, x1, y1):
@@ -96,76 +102,46 @@ def line_cells(x0, y0, x1, y1):
     return [(round(x0 + (x1 - x0) * i / n), round(y0 + (y1 - y0) * i / n)) for i in range(n + 1)]
 
 
+def outline(cells, region):
+    """区域里有一个邻格不在区域内的格子，才算外轮廓。"""
+    out = []
+    for x, y in cells:
+        for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+            if (nx, ny) not in region:
+                out.append((x, y))
+                break
+    return out
+
+
 def build():
     grid = [["."] * W for _ in range(H)]
+    for y, segs in enumerate(ROWS):
+        x = 0
+        for ch, n in segs:
+            for _ in range(n):
+                grid[y][x] = ch
+                x += 1
+        assert x == W, f"row {y} has {x} cells"
 
-    def paint(letter, cells):
-        for x, y in cells:
-            if 0 <= x < W and 0 <= y < H:
-                grid[y][x] = letter
-
-    cap = cells_of(CAP)
-    face = cells_of(FACE)
-    robe = [(x + OX, y) for (y, x0, x1) in ROBE for x in range(x0, x1 + 1)]
-    beard = cells_of(BEARD)
-    face_set, beard_set = set(face), set(beard)
-
-    paint("c", cap)
-    paint("f", face)
-    paint("r", robe)
-    paint(".", [(x + OX, y) for (y, x0, x1) in SASH for x in range(x0, x1 + 1)])
-    paint(".", FOLDS)  # FOLDS 已是最终坐标
-    # 两道透缝：把宽袖从肩上分出来
-    paint(".", line_cells(15, 21, 12, 38) + line_cells(30, 21, 34, 37))
-    paint("b", beard)
-    paint("m", cells_of(BROWS) + cells_of(NOSE) + cells_of(MOUTH))
-    paint("e", cells_of(EYES))
-
-    # 拂尘：从右手斜向上，头部是一团带两道透缝的毛
-    wx, wy, rx, ry = WHISK_FLUFF
-    for (hx, hy) in WHISK_HANDLE:
-        paint("w", [(hx, hy)])
-    for y in range(int(wy - ry) - 1, int(wy + ry) + 2):
-        for x in range(int(wx - rx) - 1, int(wx + rx) + 2):
-            if ((x - wx) / rx) ** 2 + ((y - wy) / ry) ** 2 <= 1:
-                if y in (int(wy) - 1, int(wy) + 1):
-                    grid[y][x] = "."
-                else:
-                    grid[y][x] = "w"
-
+    # 罗盘：外圈以内实心，外圈与画面其余部分之间留一圈空隙；中间一道环线透出底色
     cx, cy = LUO_C
     for y in range(H):
         for x in range(W):
             d2 = (x - cx) ** 2 + (y - cy) ** 2
-            if d2 <= LUO_HALO2 and d2 > LUO_R2:
+            if LUO_R2 < d2 <= LUO_HALO2:
                 grid[y][x] = "."
-    for y in range(H):
-        for x in range(W):
-            d2 = (x - cx) ** 2 + (y - cy) ** 2
-            if d2 <= LUO_R2:
-                # 中心一点实心，中间与外圈两道环线透出底色
-                if d2 <= 1.5:
-                    grid[y][x] = "l"
-                elif 9 <= d2 <= 11:
-                    grid[y][x] = "."
-                else:
-                    grid[y][x] = "l"
+            elif d2 <= LUO_R2:
+                grid[y][x] = "." if 9 <= d2 <= 11 else "l"
 
-    # 轮廓：脸、胡须只保留边界
-    def outline(cells, region):
-        out = []
-        for x, y in cells:
-            for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
-                if (nx, ny) not in region:
-                    out.append((x, y))
-                    break
-        return out
+    face = [(x, y) for y in range(H) for x in range(W) if grid[y][x] in FACE_LETTERS]
+    beard = [(x, y) for y in range(H) for x in range(W) if grid[y][x] == "b"]
+    face_set, beard_set = set(face), set(beard)
 
-    layers = {"body": [], "beard": [], "eyes": [], "luopan": [], "lids": []}
+    layers = {"body": [], "beard": [], "eyes": [], "luopan": [], "lids": list(LID_CELLS)}
     for y in range(H):
         for x in range(W):
             ch = grid[y][x]
-            if ch in ("c", "r", "m", "w"):
+            if ch in BODY_LETTERS:
                 layers["body"].append((x, y))
             elif ch == "l":
                 layers["luopan"].append((x, y))
@@ -173,11 +149,6 @@ def build():
                 layers["eyes"].append((x, y))
     layers["body"] += outline(face, face_set)
     layers["beard"] = outline(beard, beard_set)
-    layers["lids"] = [(x + OX, y) for (y, x0, x1) in LIDS for x in range(x0, x1 + 1)]
-    layers["lids"] = [(x, y) for x, y in layers["lids"] if x < W]
-    # 罗盘：只留 "l" 格（上面已经把环线挖掉）
-    layers["luopan"] = [(x, y) for x, y in layers["luopan"]]
-    # 眼皮：眼睛行的下一行是闭眼线，它本身就在眼睛格里，眨眼时单独显示
     return layers, grid
 
 
@@ -232,7 +203,7 @@ def figure_paths(classes=True):
         f'<path{c("luopan")} d="{runs_d(layers["luopan"])}"/>',
         f'<path{c("eyes")} d="{runs_d(layers["eyes"])}"/>',
         f'<path{c("lids")} d="{runs_d(layers["lids"])}"/>',
-        f'<path{c("shadow")} d="M11 52h23v1h-23z" opacity=".22"/>',
+        f'<path{c("shadow")} d="M7 52h34v1h-34z" opacity=".22"/>',
     ]
     for k, (tx, ty) in enumerate(TALS, 1):
         out.append(f'<path{c("tal tal-" + str(k))} d="{runs_d(tal_cells(tx, ty))}"/>')
@@ -252,28 +223,22 @@ def stage_markup():
 
 
 def avatar_markup():
+    # 头像只取头和上半身：格子 x 12–36、y 0–24
     return (
-        '<svg class="gx-avatar" viewBox="11 0 22 22" aria-hidden="true">'
+        '<svg class="gx-avatar" viewBox="12 0 24 24" aria-hidden="true">'
         f'<g fill="currentColor">{figure_paths(classes=False)}</g></svg>'
     )
 
 
 def ascii_preview():
-    layers, grid = build()
-    lines = []
-    for j in range(H):
-        row = []
-        for i in range(W):
-            ch = grid[j][i]
-            row.append("#" if ch in ("c", "r", "m", "l", "e") else ("o" if ch == "f" or ch == "b" else "."))
-        lines.append("".join(row))
-    # 符纸叠在右侧
-    canvas = [list(l) for l in lines]
+    _, grid = build()
+    canvas = [list(row) for row in grid]
     for tx, ty in TALS:
         for x, y in tal_cells(tx, ty):
             if 0 <= x < W and 0 <= y < H:
                 canvas[y][x] = "t"
-    return "\n".join("".join(r) for r in canvas)
+    glyph = {"c": "#", "r": "#", "m": "*", "l": "@", "e": "e", "f": "o", "b": "o", "h": " ", ".": ".", "t": "t"}
+    return "\n".join("".join(glyph.get(ch, ch) for ch in row) for row in canvas)
 
 
 def anchor_fractions():
