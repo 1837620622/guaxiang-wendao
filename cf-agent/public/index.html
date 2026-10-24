@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#efe6d4">
-<meta name="description" content="卦先生：风水大师问答。读《改命记实录》919 章原文，问家居、财位、方位、日子，有据标到第几章、第几段。">
-<title>卦象问道 · 卦先生 — 风水大师，有据照书</title>
+<meta name="description" content="传康KK打造的智能风水大师。读《改命记实录》919 章原文，问家居、财位、方位、日子，有据标到第几章、第几段。">
+<title>卦象问道 · 传康KK打造的智能风水大师</title>
 <link rel="icon" href="/favicon.ico" sizes="32x32">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/favicon.png">
@@ -25,6 +25,7 @@
     --brass: #8a6430;
     --green: #2c5c40;
     --amber: #8a5a12;
+    --talk: 15px;
     /* 1920×1080 舞台按 cover 缩放后的比例 */
     --vs: max(calc(100vw / 1920), calc(100vh / 1080));
     /* 气泡钉在卦先生额头右侧：舞台坐标的比例（见 scripts/make_master.py 里的锚点） */
@@ -157,7 +158,7 @@
   }
   @keyframes blink { 50% { opacity: 0; } }
 
-  @media (max-width: 720px) {
+  @media (max-width: 860px) {
     :root { --u: clamp(0.8px, calc(100vw / 400), 1.5px); --gutter: calc(var(--u) * 20); }
     .hero { min-height: 0; }
     .hero__media {
@@ -259,8 +260,9 @@
   .body { max-width: min(640px, calc(100% - 40px)); min-width: 0; }
   .talk {
     border: 1px solid var(--ink); background: var(--paper2); color: var(--ink);
-    padding: 12px 14px; line-height: 1.75; font-size: 15px; white-space: pre-wrap;
+    padding: 12px 14px; line-height: 1.75; font-size: var(--talk); white-space: pre-wrap;
   }
+  .talk img { max-width: 100%; display: block; margin-bottom: 8px; border: 1px solid var(--line); }
   .msg.user .talk { background: var(--tint); color: var(--ink); }
   .talk .retry {
     display: inline-block; margin-top: 10px; min-height: 40px; padding: 0 14px;
@@ -277,17 +279,17 @@
   .badge.no, .badge.fail { background: #f6e4df; color: var(--red); }
   .tag { font-size: 12px; color: var(--ink2); }
   .spacer { flex: 1; }
-  .copybtn, .fb, .speak {
+  .copybtn, .fb, .speak, .backq {
     min-height: 40px; padding: 0 10px; border: 1px solid var(--line); background: transparent; font-size: 12px;
   }
   .copybtn.done, .fb.on, .speak.on { border-color: var(--green); background: transparent; color: var(--green); }
   .fb.down.on { background: transparent; border-color: var(--red); color: var(--red); }
   .fb-ack { font-size: 12px; color: var(--ink2); }
-  .conclusion { padding: 12px 14px 4px; font-size: 16px; line-height: 1.65; }
+  .conclusion { padding: 12px 14px 4px; font-size: calc(var(--talk) + 1px); line-height: 1.65; }
   .conclusion .q { color: var(--red); }
   .caret { display: inline-block; width: 1px; height: .9em; background: var(--ink); margin-left: 2px; vertical-align: -1px; animation: blink 1s steps(1) 4; }
   .points { padding: 4px 8px 8px; }
-  .point { display: flex; gap: 8px; padding: 8px 6px; border-top: 1px solid var(--line); line-height: 1.7; font-size: 14px; }
+  .point { display: flex; gap: 8px; padding: 8px 6px; border-top: 1px solid var(--line); line-height: 1.7; font-size: calc(var(--talk) - 1px); }
   .point .num { width: 22px; height: 22px; flex: none; margin-top: 2px; display: grid; place-items: center; border: 1px solid var(--ink); font-size: 12px; }
   .point.weak { color: var(--ink2); }
   .point.weak .num { border-style: dashed; }
@@ -308,7 +310,7 @@
   .chev { font-size: 10px; color: var(--ink2); }
   details.q[open] .chev { transform: rotate(90deg); }
   details.q.hl { background: var(--tint); }
-  .qtext { padding: 0 8px 10px 28px; font-size: 14px; line-height: 1.75; }
+  .qtext { padding: 0 8px 10px 28px; font-size: var(--talk); line-height: 1.75; }
   .verify { display: block; margin-top: 4px; font-size: 12px; }
   .verify.ok { color: var(--green); }
   .verify.bad { color: var(--red); text-decoration: underline dashed; }
@@ -408,7 +410,13 @@
   .gate.ready #gateEnter, .gate.ready #gateAsk { opacity: 1; transform: none; pointer-events: auto; transition: opacity .4s ease .05s, transform .4s ease .05s; }
 
   .shell { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
-  .col { grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+  .col { grid-column: 2; grid-row: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; position: relative; }
+  .to-end {
+    position: absolute; right: 14px; bottom: 10px; z-index: 4;
+    min-height: 36px; padding: 0 12px; border: 1px solid var(--ink);
+    background: var(--paper); color: var(--ink); font-size: 13px;
+  }
+  .to-end[hidden] { display: none; }
   #side { grid-column: 1; grid-row: 1 / span 2; min-width: 0; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; border-right: 1px solid var(--ink); background: var(--paper2); padding: 12px 12px 20px; }
   .side-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
   .side-head span { letter-spacing: .1em; }
@@ -418,7 +426,7 @@
   .cityrow { display: flex; gap: 8px; align-items: flex-end; }
   .cityrow label { flex: 1; }
   #locBtn { flex: none; min-width: 64px; height: 44px; padding: 0 10px; border: 1px solid var(--ink); background: var(--paper); }
-  #gateBtn { width: 100%; margin-top: 8px; }
+  #gateBtn, #headBtn { width: 100%; margin-top: 8px; min-height: 44px; padding: 0 12px; border: 1px solid var(--ink); background: var(--paper); }
   .face { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 13px; color: var(--ink2); }
   .geo-note { margin: 8px 0 0; font-size: 12px; line-height: 1.55; color: var(--ink2); }
   .pan { display: flex; align-items: center; gap: 8px; min-height: 44px; margin: 10px 0; padding: 0 8px 0 12px; border: 1px solid var(--ink); background: var(--tint); }
@@ -437,7 +445,7 @@
   .recent button { display: block; width: 100%; min-height: 44px; padding: 8px 10px; text-align: left; border: 0; border-top: 1px solid var(--line); background: var(--paper2); font-size: 13px; line-height: 1.4; }
   .quotes-title.recent-title { padding: 8px 10px 4px; }
   #sideMask { display: none; }
-  .dailybox { margin: 0 12px 10px; padding: 8px 10px 10px; border: 1px solid var(--ink); border-left: 4px solid var(--brass); background: var(--tint); font-size: 14px; line-height: 1.75; }
+  .dailybox { margin: 0 12px 10px; padding: 8px 10px 10px; border: 1px solid var(--ink); border-left: 4px solid var(--brass); background: var(--tint); font-size: var(--talk); line-height: 1.75; }
   .dailybox .vt { margin-bottom: 4px; font-size: 12px; letter-spacing: .08em; color: var(--ink2); }
   .note { margin: 0 12px 8px; font-size: 12px; line-height: 1.6; color: var(--ink2); }
   .webitem { padding: 6px 2px 8px; border-top: 1px solid var(--line); font-size: 13px; line-height: 1.55; }
@@ -469,9 +477,11 @@
     .hero__title, .hero__body, .hero__stats { display: none; }
     .bubble {
       left: var(--gutter); right: auto; top: 50px; transform: none;
-      max-width: 54%; white-space: normal; z-index: 2;
+      max-width: 52%; z-index: 2;
       font-size: 13px; line-height: 1.45;
       padding: 8px 10px;
+      display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+      overflow: hidden;
     }
     .bubble__tail { display: none; }
     .app {
@@ -480,21 +490,19 @@
     .app-head { flex: none; }
     .shell { display: flex; flex-direction: column; overflow: hidden; min-height: 0; }
     #side {
-      width: 100%; flex: 0 0 auto; max-height: 248px; min-height: 0;
-      overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain;
-      touch-action: pan-y;
-      display: flex; flex-direction: column; border-right: 0; border-bottom: 1px solid var(--ink); padding: 8px 10px 10px;
+      width: 100%; flex: 0 1 200px; max-height: 200px; min-height: 0;
+      overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; touch-action: pan-y;
+      display: block; border-right: 0; border-bottom: 1px solid var(--ink); padding: 8px 10px 10px;
     }
-    /* 窄屏先看见方位和问法，城市朝向在同一栏里往下滚，避免长对话把问法挤没。 */
-    #side .dirs { order: 1; }
-    #side .board { order: 2; }
-    #side .tools { order: 3; }
-    #side .geo-note, #side #sitAsk, #side .pan, #side .recent { order: 4; }
+    /* 开聊以后把问法栏压矮，把高度让给对话。栏内仍可自己滚。 */
+    body.has-talk #side { flex-basis: 132px; max-height: 132px; }
+    .col { min-height: 160px; }
     footer { grid-column: auto; grid-row: auto; flex: none; }
     .col { display: flex; flex: 1 1 0%; min-height: 0; min-width: 0; overflow: hidden; }
     main { touch-action: pan-y; }
     #side .tools, #side .board, #side .dirs, #side .pan, #side .recent { width: 100%; max-width: none; margin-left: 0; margin-right: 0; }
     #side .board { display: block; overflow: visible; }
+    #side .face span { position: static; width: auto; height: auto; overflow: visible; clip-path: none; }
     #side .board > .asks[hidden] { display: none; }
     #side .lead { display: block; margin: 8px 0 0; padding: 0; font-size: 13px; line-height: 1.6; color: var(--ink2); }
     .dirs button { min-height: 48px; }
@@ -504,6 +512,7 @@
     #side .face { grid-column: 1; margin-top: 0; min-width: 0; gap: 2px; }
     #side #facing { width: 100%; min-width: 0; }
     #side #gateBtn { grid-column: 2; width: auto; margin-top: 0; padding: 0 12px; align-self: end; }
+    #side #headBtn { grid-column: 1 / -1; width: 100%; margin-top: 0; }
   }
   /* 键盘弹出或矮横屏时，把立绘让掉，保证输入条和对话还在视口里。 */
   @media (max-width: 860px) and (max-height: 520px) {
@@ -576,7 +585,7 @@
 <section class="hero">
   <div class="hero__media">
 <!-- gx:stage:start -->
-<svg class="stage" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" role="img" data-i18n-aria="gx_aria">
+<svg class="stage" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice" role="img" aria-label="传康KK打造的智能风水大师" data-i18n-aria="gx_aria">
   <path class="gx-streaks" d="M1431 489h379v3h-379zM1104 579h193v3h-193zM1474 279h351v3h-351zM1622 33h298v3h-298zM1604 129h316v3h-316zM1273 249h523v3h-523zM1637 252h283v3h-283zM1484 234h436v3h-436zM1410 447h274v3h-274zM1086 468h430v3h-430zM1144 375h383v3h-383zM1252 402h165v3h-165zM1383 291h529v3h-529zM1629 411h291v3h-291zM1149 18h403v3h-403zM1256 78h218v3h-218zM1131 573h617v3h-617zM1088 351h220v3h-220zM1403 591h310v3h-310zM1187 519h342v3h-342zM1428 348h410v3h-410zM1652 219h268v3h-268zM1443 135h295v3h-295zM1167 528h517v3h-517zM1080 285h282v3h-282zM1581 399h287v3h-287z"/>
   <g class="gx-figure" transform="translate(1000 200) scale(14)" fill="currentColor">
     <path class="gx-body" d="M18 0h12v1h-12zM16 1h16v1h-16zM15 2h18v1h-18zM14 3h20v1h-20zM12 4h24v1h-24zM10 5h28v1h-28zM15 6h18v1h-18zM13 7h2v1h-2zM33 7h2v1h-2zM12 8h1v1h-1zM35 8h1v1h-1zM12 9h1v1h-1zM35 9h1v1h-1zM12 10h1v1h-1zM16 10h3v1h-3zM29 10h3v1h-3zM35 10h1v1h-1zM12 11h1v1h-1zM35 11h1v1h-1zM12 12h1v1h-1zM35 12h1v1h-1zM12 13h1v1h-1zM35 13h1v1h-1zM12 14h1v1h-1zM35 14h1v1h-1zM12 15h1v1h-1zM35 15h1v1h-1zM12 16h1v1h-1zM14 16h2v1h-2zM32 16h2v1h-2zM35 16h1v1h-1zM12 17h1v1h-1zM22 17h1v1h-1zM25 17h1v1h-1zM35 17h1v1h-1zM12 18h1v1h-1zM23 18h2v1h-2zM35 18h1v1h-1zM12 19h1v1h-1zM35 19h1v1h-1zM13 20h2v1h-2zM19 20h10v1h-10zM33 20h2v1h-2zM15 21h4v1h-4zM29 21h4v1h-4zM18 22h1v1h-1zM29 22h1v1h-1zM17 25h4v1h-4zM27 25h4v1h-4zM15 26h7v1h-7zM26 26h7v1h-7zM13 27h10v1h-10zM25 27h10v1h-10zM11 28h26v1h-26zM10 29h1v1h-1zM12 29h24v1h-24zM37 29h1v1h-1zM9 30h2v1h-2zM12 30h24v1h-24zM37 30h2v1h-2zM8 31h3v1h-3zM12 31h24v1h-24zM37 31h3v1h-3zM8 32h3v1h-3zM12 32h24v1h-24zM37 32h3v1h-3zM8 33h3v1h-3zM12 33h24v1h-24zM37 33h3v1h-3zM8 34h3v1h-3zM12 34h24v1h-24zM37 34h3v1h-3zM8 35h3v1h-3zM12 35h24v1h-24zM37 35h3v1h-3zM8 36h3v1h-3zM12 36h24v1h-24zM37 36h3v1h-3zM8 37h3v1h-3zM12 37h24v1h-24zM37 37h3v1h-3zM7 39h4v1h-4zM18 39h23v1h-23zM7 40h3v1h-3zM19 40h22v1h-22zM7 41h2v1h-2zM20 41h21v1h-21zM7 42h2v1h-2zM20 42h21v1h-21zM7 43h1v1h-1zM21 43h20v1h-20zM7 44h1v1h-1zM21 44h20v1h-20zM6 45h2v1h-2zM21 45h21v1h-21zM6 46h3v1h-3zM20 46h22v1h-22zM6 47h3v1h-3zM20 47h22v1h-22zM6 48h4v1h-4zM19 48h23v1h-23zM6 49h5v1h-5zM18 49h24v1h-24zM6 50h7v1h-7zM16 50h26v1h-26zM6 51h36v1h-36z"/><path class="gx-beard" d="M19 21h10v1h-10zM19 22h1v1h-1zM28 22h1v1h-1zM19 23h1v1h-1zM28 23h1v1h-1zM20 24h1v1h-1zM27 24h1v1h-1zM21 25h1v1h-1zM26 25h1v1h-1zM22 26h1v1h-1zM25 26h1v1h-1zM23 27h2v1h-2z"/><path class="gx-luopan" d="M12 40h5v1h-5zM11 41h2v1h-2zM16 41h2v1h-2zM10 42h9v1h-9zM10 43h1v1h-1zM12 43h5v1h-5zM18 43h1v1h-1zM10 44h1v1h-1zM12 44h5v1h-5zM18 44h1v1h-1zM10 45h1v1h-1zM12 45h5v1h-5zM18 45h1v1h-1zM10 46h9v1h-9zM11 47h2v1h-2zM16 47h2v1h-2zM12 48h5v1h-5z"/><path class="gx-eyes" d="M16 13h1v1h-1zM31 13h1v1h-1zM16 14h2v1h-2zM30 14h2v1h-2zM16 15h2v1h-2zM30 15h2v1h-2z"/><path class="gx-lids" d="M16 14h2v1h-2zM30 14h2v1h-2z"/><path class="gx-shadow" d="M7 52h34v1h-34z" opacity=".22"/><path class="gx-tal tal-1" d="M39 6h5v1h-5zM39 7h1v1h-1zM43 7h1v1h-1zM39 8h1v1h-1zM41 8h1v1h-1zM43 8h1v1h-1zM39 9h1v1h-1zM43 9h1v1h-1zM39 10h1v1h-1zM41 10h1v1h-1zM43 10h1v1h-1zM39 11h1v1h-1zM43 11h1v1h-1zM39 12h1v1h-1zM43 12h1v1h-1zM39 13h5v1h-5z"/><path class="gx-tal tal-2" d="M41 17h5v1h-5zM41 18h1v1h-1zM45 18h1v1h-1zM41 19h1v1h-1zM43 19h1v1h-1zM45 19h1v1h-1zM41 20h1v1h-1zM45 20h1v1h-1zM41 21h1v1h-1zM43 21h1v1h-1zM45 21h1v1h-1zM41 22h1v1h-1zM45 22h1v1h-1zM41 23h1v1h-1zM45 23h1v1h-1zM41 24h5v1h-5z"/><path class="gx-tal tal-3" d="M41 30h5v1h-5zM41 31h1v1h-1zM45 31h1v1h-1zM41 32h1v1h-1zM43 32h1v1h-1zM45 32h1v1h-1zM41 33h1v1h-1zM45 33h1v1h-1zM41 34h1v1h-1zM43 34h1v1h-1zM45 34h1v1h-1zM41 35h1v1h-1zM45 35h1v1h-1zM41 36h1v1h-1zM45 36h1v1h-1zM41 37h5v1h-5z"/>
@@ -600,6 +609,7 @@
       <li><a href="#compass" data-i18n="nav_compass">罗盘</a></li>
       <li><a href="#model" data-i18n="nav_model">模型</a></li>
       <li><a href="/read.html" data-i18n="nav_text">原文</a></li>
+      <li><a href="#evidence" data-i18n="nav_evidence">证据</a></li>
       <li><a href="#about" data-i18n="nav_about">关于</a></li>
     </ul>
   </header>
@@ -609,7 +619,7 @@
     <svg viewBox="0 0 436 174" shape-rendering="crispEdges" aria-hidden="true"><path d="M27.25 0h6.812v6.812h-6.812zM61.312 0h6.812v6.812h-6.812zM136.25 0h6.812v6.812h-6.812zM231.625 0h6.812v6.812h-6.812zM367.875 0h6.812v6.812h-6.812zM408.75 0h6.812v6.812h-6.812zM27.25 6.812h6.812v6.812h-6.812zM61.312 6.812h6.812v6.812h-6.812zM129.438 6.812h54.5v6.812h-54.5zM238.438 6.812h6.812v6.812h-6.812zM252.062 6.812h61.312v6.812h-61.312zM340.625 6.812h6.812v6.812h-6.812zM374.688 6.812h6.812v6.812h-6.812zM401.938 6.812h6.812v6.812h-6.812zM27.25 13.625h6.812v6.812h-6.812zM61.312 13.625h6.812v6.812h-6.812zM122.625 13.625h6.812v6.812h-6.812zM177.125 13.625h6.812v6.812h-6.812zM306.562 13.625h6.812v6.812h-6.812zM347.438 13.625h6.812v6.812h-6.812zM6.812 20.438h47.688v6.812h-47.688zM61.312 20.438h6.812v6.812h-6.812zM115.812 20.438h81.75v6.812h-81.75zM224.812 20.438h6.812v6.812h-6.812zM306.562 20.438h6.812v6.812h-6.812zM347.438 20.438h6.812v6.812h-6.812zM361.062 20.438h61.312v6.812h-61.312zM27.25 27.25h6.812v6.812h-6.812zM61.312 27.25h6.812v6.812h-6.812zM109 27.25h6.812v6.812h-6.812zM122.625 27.25h6.812v6.812h-6.812zM156.688 27.25h6.812v6.812h-6.812zM190.75 27.25h6.812v6.812h-6.812zM224.812 27.25h6.812v6.812h-6.812zM306.562 27.25h6.812v6.812h-6.812zM381.5 27.25h6.812v6.812h-6.812zM27.25 34.062h6.812v6.812h-6.812zM61.312 34.062h13.625v6.812h-13.625zM122.625 34.062h6.812v6.812h-6.812zM149.875 34.062h6.812v6.812h-6.812zM190.75 34.062h6.812v6.812h-6.812zM224.812 34.062h6.812v6.812h-6.812zM252.062 34.062h34.062v6.812h-34.062zM306.562 34.062h6.812v6.812h-6.812zM367.875 34.062h47.688v6.812h-47.688zM0 40.875h68.125v6.812h-68.125zM74.938 40.875h6.812v6.812h-6.812zM122.625 40.875h74.938v6.812h-74.938zM224.812 40.875h6.812v6.812h-6.812zM252.062 40.875h6.812v6.812h-6.812zM279.312 40.875h6.812v6.812h-6.812zM306.562 40.875h6.812v6.812h-6.812zM327 40.875h27.25v6.812h-27.25zM367.875 40.875h6.812v6.812h-6.812zM408.75 40.875h6.812v6.812h-6.812zM27.25 47.688h6.812v6.812h-6.812zM61.312 47.688h6.812v6.812h-6.812zM81.75 47.688h6.812v6.812h-6.812zM143.062 47.688h13.625v6.812h-13.625zM224.812 47.688h6.812v6.812h-6.812zM252.062 47.688h6.812v6.812h-6.812zM279.312 47.688h6.812v6.812h-6.812zM306.562 47.688h6.812v6.812h-6.812zM347.438 47.688h6.812v6.812h-6.812zM367.875 47.688h47.688v6.812h-47.688zM27.25 54.5h6.812v6.812h-6.812zM61.312 54.5h6.812v6.812h-6.812zM88.562 54.5h6.812v6.812h-6.812zM129.438 54.5h13.625v6.812h-13.625zM156.688 54.5h6.812v6.812h-6.812zM183.938 54.5h6.812v6.812h-6.812zM224.812 54.5h6.812v6.812h-6.812zM252.062 54.5h6.812v6.812h-6.812zM279.312 54.5h6.812v6.812h-6.812zM306.562 54.5h6.812v6.812h-6.812zM347.438 54.5h6.812v6.812h-6.812zM367.875 54.5h6.812v6.812h-6.812zM408.75 54.5h6.812v6.812h-6.812zM6.812 61.312h47.688v6.812h-47.688zM61.312 61.312h6.812v6.812h-6.812zM88.562 61.312h6.812v6.812h-6.812zM115.812 61.312h13.625v6.812h-13.625zM149.875 61.312h6.812v6.812h-6.812zM163.5 61.312h6.812v6.812h-6.812zM177.125 61.312h6.812v6.812h-6.812zM224.812 61.312h6.812v6.812h-6.812zM252.062 61.312h6.812v6.812h-6.812zM279.312 61.312h6.812v6.812h-6.812zM306.562 61.312h6.812v6.812h-6.812zM347.438 61.312h6.812v6.812h-6.812zM367.875 61.312h47.688v6.812h-47.688zM27.25 68.125h6.812v6.812h-6.812zM61.312 68.125h6.812v6.812h-6.812zM136.25 68.125h13.625v6.812h-13.625zM163.5 68.125h13.625v6.812h-13.625zM224.812 68.125h6.812v6.812h-6.812zM252.062 68.125h6.812v6.812h-6.812zM279.312 68.125h6.812v6.812h-6.812zM306.562 68.125h6.812v6.812h-6.812zM347.438 68.125h6.812v6.812h-6.812zM367.875 68.125h6.812v6.812h-6.812zM408.75 68.125h6.812v6.812h-6.812zM27.25 74.938h6.812v6.812h-6.812zM61.312 74.938h6.812v6.812h-6.812zM115.812 74.938h20.438v6.812h-20.438zM156.688 74.938h13.625v6.812h-13.625zM177.125 74.938h6.812v6.812h-6.812zM224.812 74.938h6.812v6.812h-6.812zM252.062 74.938h34.062v6.812h-34.062zM306.562 74.938h6.812v6.812h-6.812zM347.438 74.938h6.812v6.812h-6.812zM367.875 74.938h47.688v6.812h-47.688zM27.25 81.75h6.812v6.812h-6.812zM61.312 81.75h6.812v6.812h-6.812zM143.062 81.75h13.625v6.812h-13.625zM163.5 81.75h6.812v6.812h-6.812zM183.938 81.75h6.812v6.812h-6.812zM224.812 81.75h6.812v6.812h-6.812zM252.062 81.75h6.812v6.812h-6.812zM279.312 81.75h6.812v6.812h-6.812zM306.562 81.75h6.812v6.812h-6.812zM347.438 81.75h6.812v6.812h-6.812zM367.875 81.75h6.812v6.812h-6.812zM408.75 81.75h6.812v6.812h-6.812zM27.25 88.562h40.875v6.812h-40.875zM129.438 88.562h13.625v6.812h-13.625zM163.5 88.562h6.812v6.812h-6.812zM190.75 88.562h6.812v6.812h-6.812zM224.812 88.562h6.812v6.812h-6.812zM306.562 88.562h6.812v6.812h-6.812zM340.625 88.562h6.812v6.812h-6.812zM354.25 88.562h6.812v6.812h-6.812zM0 95.375h27.25v6.812h-27.25zM61.312 95.375h6.812v6.812h-6.812zM109 95.375h20.438v6.812h-20.438zM149.875 95.375h6.812v6.812h-6.812zM163.5 95.375h6.812v6.812h-6.812zM197.562 95.375h13.625v6.812h-13.625zM224.812 95.375h6.812v6.812h-6.812zM292.938 95.375h6.812v6.812h-6.812zM306.562 95.375h6.812v6.812h-6.812zM333.812 95.375h6.812v6.812h-6.812zM361.062 95.375h68.125v6.812h-68.125zM61.312 102.188h6.812v6.812h-6.812zM156.688 102.188h6.812v6.812h-6.812zM224.812 102.188h6.812v6.812h-6.812zM299.75 102.188h6.812v6.812h-6.812zM10.219 132.625h6.812v3.406h-6.812zM34.062 132.625h17.031v3.406h-17.031zM91.969 132.625h6.812v3.406h-6.812zM115.812 132.625h13.625v3.406h-13.625zM139.656 132.625h20.438v3.406h-20.438zM166.906 132.625h3.406v3.406h-3.406zM183.938 132.625h3.406v3.406h-3.406zM194.156 132.625h23.844v3.406h-23.844zM6.812 136.031h3.406v3.406h-3.406zM17.031 136.031h3.406v3.406h-3.406zM40.875 136.031h3.406v3.406h-3.406zM88.562 136.031h3.406v3.406h-3.406zM98.781 136.031h3.406v3.406h-3.406zM112.406 136.031h3.406v3.406h-3.406zM129.438 136.031h3.406v3.406h-3.406zM139.656 136.031h3.406v3.406h-3.406zM166.906 136.031h6.812v3.406h-6.812zM183.938 136.031h3.406v3.406h-3.406zM204.375 136.031h3.406v3.406h-3.406zM6.812 139.438h3.406v3.406h-3.406zM17.031 139.438h3.406v3.406h-3.406zM40.875 139.438h3.406v3.406h-3.406zM88.562 139.438h3.406v3.406h-3.406zM98.781 139.438h3.406v3.406h-3.406zM112.406 139.438h3.406v3.406h-3.406zM129.438 139.438h3.406v3.406h-3.406zM139.656 139.438h3.406v3.406h-3.406zM166.906 139.438h6.812v3.406h-6.812zM183.938 139.438h3.406v3.406h-3.406zM204.375 139.438h3.406v3.406h-3.406zM3.406 142.844h3.406v3.406h-3.406zM20.438 142.844h3.406v3.406h-3.406zM40.875 142.844h3.406v3.406h-3.406zM85.156 142.844h3.406v3.406h-3.406zM102.188 142.844h3.406v3.406h-3.406zM112.406 142.844h3.406v3.406h-3.406zM139.656 142.844h3.406v3.406h-3.406zM166.906 142.844h3.406v3.406h-3.406zM173.719 142.844h3.406v3.406h-3.406zM183.938 142.844h3.406v3.406h-3.406zM204.375 142.844h3.406v3.406h-3.406zM3.406 146.25h3.406v3.406h-3.406zM20.438 146.25h3.406v3.406h-3.406zM40.875 146.25h3.406v3.406h-3.406zM85.156 146.25h3.406v3.406h-3.406zM102.188 146.25h3.406v3.406h-3.406zM112.406 146.25h3.406v3.406h-3.406zM139.656 146.25h17.031v3.406h-17.031zM166.906 146.25h3.406v3.406h-3.406zM173.719 146.25h3.406v3.406h-3.406zM183.938 146.25h3.406v3.406h-3.406zM204.375 146.25h3.406v3.406h-3.406zM3.406 149.656h20.438v3.406h-20.438zM40.875 149.656h3.406v3.406h-3.406zM85.156 149.656h20.438v3.406h-20.438zM112.406 149.656h3.406v3.406h-3.406zM122.625 149.656h10.219v3.406h-10.219zM139.656 149.656h3.406v3.406h-3.406zM166.906 149.656h3.406v3.406h-3.406zM177.125 149.656h3.406v3.406h-3.406zM183.938 149.656h3.406v3.406h-3.406zM204.375 149.656h3.406v3.406h-3.406zM3.406 153.062h3.406v3.406h-3.406zM20.438 153.062h3.406v3.406h-3.406zM40.875 153.062h3.406v3.406h-3.406zM85.156 153.062h3.406v3.406h-3.406zM102.188 153.062h3.406v3.406h-3.406zM112.406 153.062h3.406v3.406h-3.406zM129.438 153.062h3.406v3.406h-3.406zM139.656 153.062h3.406v3.406h-3.406zM166.906 153.062h3.406v3.406h-3.406zM177.125 153.062h3.406v3.406h-3.406zM183.938 153.062h3.406v3.406h-3.406zM204.375 153.062h3.406v3.406h-3.406zM3.406 156.469h3.406v3.406h-3.406zM20.438 156.469h3.406v3.406h-3.406zM40.875 156.469h3.406v3.406h-3.406zM85.156 156.469h3.406v3.406h-3.406zM102.188 156.469h3.406v3.406h-3.406zM112.406 156.469h3.406v3.406h-3.406zM129.438 156.469h3.406v3.406h-3.406zM139.656 156.469h3.406v3.406h-3.406zM166.906 156.469h3.406v3.406h-3.406zM180.531 156.469h6.812v3.406h-6.812zM204.375 156.469h3.406v3.406h-3.406zM3.406 159.875h3.406v3.406h-3.406zM20.438 159.875h3.406v3.406h-3.406zM40.875 159.875h3.406v3.406h-3.406zM85.156 159.875h3.406v3.406h-3.406zM102.188 159.875h3.406v3.406h-3.406zM112.406 159.875h3.406v3.406h-3.406zM126.031 159.875h6.812v3.406h-6.812zM139.656 159.875h3.406v3.406h-3.406zM166.906 159.875h3.406v3.406h-3.406zM180.531 159.875h6.812v3.406h-6.812zM204.375 159.875h3.406v3.406h-3.406zM3.406 163.281h3.406v3.406h-3.406zM20.438 163.281h3.406v3.406h-3.406zM34.062 163.281h17.031v3.406h-17.031zM85.156 163.281h3.406v3.406h-3.406zM102.188 163.281h3.406v3.406h-3.406zM115.812 163.281h10.219v3.406h-10.219zM129.438 163.281h3.406v3.406h-3.406zM139.656 163.281h20.438v3.406h-20.438zM166.906 163.281h3.406v3.406h-3.406zM183.938 163.281h3.406v3.406h-3.406zM204.375 163.281h3.406v3.406h-3.406z"/></svg>
   </h1>
 
-  <p class="bubble" id="bubble" data-i18n-aria="bubble_aria" aria-label="卦先生说：善哉，先看门向，再寻财位。">
+  <p class="bubble" id="bubble" data-i18n-aria="bubble_aria" aria-label="传康KK打造的智能风水大师说：善哉，先看门向，再寻财位。">
     <span class="bub-text" id="bubT1" data-i18n="bub_1">善哉～ 先看门向，</span><br><span class="bub-text" id="bubT2" data-i18n="bub_2">再寻财位。</span>
     <span class="bubble__cursor" aria-hidden="true"></span>
     <svg class="bubble__tail" viewBox="0 0 6 6" shape-rendering="crispEdges" aria-hidden="true"><path fill="#f7f1e4" d="M1 0h4v1h-1v1h-1v1h-1v1h-1z"/><path fill="#1c1814" d="M0 0h1v5h-1zM1 4h1v1h-1zM2 3h1v1h-1zM3 2h1v1h-1zM4 1h1v1h-1zM5 0h1v1h-1z"/></svg>
@@ -636,13 +646,14 @@
     <a class="seal" href="#" data-gx-slot aria-label="回到首页" data-i18n-aria="home_aria"></a>
     <div class="brand-text">
       <h2 class="brand-title" data-i18n="title">卦象问道</h2>
-      <div class="sub" data-i18n="sub">卦先生 · 有据照书</div>
+      <div class="sub" data-i18n="sub">传康KK打造 · 有据照书</div>
     </div>
     <div class="hbtns">
       <button class="hbtn" type="button" id="sideBtn" data-i18n="side_open">问法</button>
       <button class="hbtn" type="button" id="modelBtn" data-i18n="model">模型</button>
       <button class="hbtn" type="button" id="readBtn" data-i18n="book">原文</button>
       <button class="hbtn" type="button" id="clearBtn" data-i18n="clear">清空</button>
+      <button class="hbtn" type="button" id="fsBtn" data-i18n="fs">字</button>
       <button class="hbtn" type="button" id="langBtn">EN</button>
     </div>
   </div>
@@ -656,10 +667,12 @@
   </div>
   <div class="tools">
     <div class="cityrow">
-      <label><span data-i18n="city">城市</span><input id="city" inputmode="text" autocomplete="off" enterkeyhint="done" placeholder="杭州" data-i18n-ph="city_ph"></label>
+      <label><span data-i18n="city">城市</span><input id="city" list="cityList" inputmode="text" autocomplete="off" enterkeyhint="done" placeholder="杭州" data-i18n-ph="city_ph"></label>
+      <datalist id="cityList"></datalist>
       <button type="button" id="locBtn" data-i18n="locate">定位</button>
     </div>
     <label class="face"><span data-i18n="facing">大门朝外（度）</span><input id="facing" inputmode="numeric" autocomplete="off" placeholder="0–359" aria-label="大门朝向度数"></label>
+    <button type="button" id="headBtn" data-i18n="heading">读手机朝向</button>
     <button type="button" id="gateBtn" data-i18n="respin">再起一盘</button>
   </div>
   <p class="geo-note" id="geoNote"></p>
@@ -720,11 +733,12 @@
 </aside>
 <div id="sideMask"></div>
 <div class="col">
+<button type="button" id="toEnd" class="to-end" hidden data-i18n="to_end">最新</button>
 <main id="main">
   <div id="chat" role="log" aria-live="polite" aria-label="对话记录">
     <div class="msg bot">
       <div class="avatar" data-gx-slot aria-hidden="true"></div>
-      <div class="body"><div class="talk" id="welcome" data-i18n="welcome">我是卦先生。问宅、问方位、问日子：书里有原文的，按《改命记实录》写到第几章、第几段，原句能点开核对。
+      <div class="body"><div class="talk" id="welcome" data-i18n="welcome">我是传康KK打造的一个智能风水大师。问宅、问方位、问日子：书里有原文的，按《改命记实录》写到第几章、第几段，原句能点开核对。
 
 书里没写到的，我另起一段日常做法，标明不是书里的话。
 
@@ -800,7 +814,7 @@
       <button class="sheet-x" type="button" data-close data-i18n="close">关闭</button>
     </div>
     <div class="sheet-body">
-      <p data-i18n="ab_1">卦象问道读的是《改命记实录》（道之光，919 章，约 130 万字）。问答只从原文找依据，并标到章与段。</p>
+      <p data-i18n="ab_1">卦象问道是传康KK打造的智能风水大师，读的是《改命记实录》（道之光，919 章，约 130 万字）。问答只从原文找依据，并标到章与段。</p>
       <p data-i18n="ab_2">内容来自公开网络连载，仅用于文化研读与民俗资料整理，不构成任何决策建议。</p>
       <div class="sheet-links">
         <a href="/read.html" data-i18n="ab_read">原文阅读</a>

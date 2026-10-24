@@ -32,7 +32,15 @@ function safeImg(u){
   return typeof u==='string' && /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+=*$/.test(u) ? u : '';
 }
 const el=h=>{const d=document.createElement('div');d.innerHTML=h.trim();return d.firstElementChild};
-const scrollBottom=()=>requestAnimationFrame(()=>{main.scrollTop=main.scrollHeight});
+const scrollBottom=()=>requestAnimationFrame(()=>{main.scrollTop=main.scrollHeight; syncToEnd();});
+function syncToEnd(){
+  const btn=document.getElementById('toEnd');
+  if(!btn) return;
+  const gap=main.scrollHeight-main.clientHeight-main.scrollTop;
+  btn.hidden=gap<64;
+}
+main.addEventListener('scroll', syncToEnd, {passive:true});
+document.getElementById('toEnd').addEventListener('click', scrollBottom);
 function syncTalk(){
   document.body.classList.toggle('has-talk', chat.children.length>1);
 }
@@ -44,9 +52,14 @@ class ApiError extends Error {
 let LANG = localStorage.getItem('gxw_lang') === 'en' ? 'en' : 'zh';
 const I18N = {
   zh: {
-    doc_title:'卦象问道 · 卦先生 — 风水大师，有据照书',
-    title:'卦象问道', sub:'卦先生 · 有据照书', side_open:'问法', model:'模型', book:'原文', clear:'清空',
+    doc_title:'卦象问道 · 传康KK打造的智能风水大师',
+    title:'卦象问道', sub:'传康KK打造 · 有据照书', side_open:'问法', model:'模型', book:'原文', clear:'清空', fs:'字', to_end:'最新',
     side_title:'问什么', close:'关闭', city:'城市', city_ph:'杭州', locate:'定位', facing:'大门朝外（度）',
+    heading:'读手机朝向', head_wait:'把手机放平，人站在门内、面朝门外。',
+    head_ok:'读到 {deg}°。这是手机朝向换算，不是书里的吉凶。',
+    head_no:'这台设备读不到朝向，可以自己填 0–359。',
+    head_deny:'没有朝向权限。可在系统里允许，或自己填度数。',
+    head_miss:'没有读到稳定朝向。再试一次，或自己填度数。',
     respin:'再起一盘', face_help:'站在门内，面朝门外，看手机指南针。不填也可以问。',
     ask_gua:'问这一卦', ask_sit:'按这个坐向问书', recent:'最近问过', ask_ph:'问宅、问方位、问日子',
     sit_line:'向{face}、坐{sit}。由 {deg}° 换算，不是书中断语。',
@@ -62,17 +75,17 @@ const I18N = {
     q_zhai_1:'大门玄关怎么布置', q_zhai_2:'卧室床头怎么摆', q_zhai_3:'床头朝哪', q_zhai_4:'书房书桌怎么摆',
     q_ji_1:'家里风水有什么禁忌', q_ji_2:'镜子怎么摆', q_ji_3:'厨房怎么布置', q_ji_4:'卫生间对着门怎么办',
     q_ri_1:'今天风水要注意什么', q_ri_2:'搬家怎么选日子', q_ri_3:'今年哪个方位利财', q_ri_4:'开门见灶怎么看',
-    welcome:'我是卦先生。问宅、问方位、问日子：书里有原文的，按《改命记实录》写到第几章、第几段，原句能点开核对。\n\n书里没写到的，我另起一段日常做法，标明不是书里的话。\n\n城市用来校方位，图可以是户型或房间。对话只存在本机，清空即删。仅供消遣，不当决定。',
+    welcome:'我是传康KK打造的一个智能风水大师。问宅、问方位、问日子：书里有原文的，按《改命记实录》写到第几章、第几段，原句能点开核对。\n\n书里没写到的，我另起一段日常做法，标明不是书里的话。\n\n城市用来校方位，图可以是户型或房间。对话只存在本机，清空即删。仅供消遣，不当决定。',
     v_有依据:'书中有依据', v_部分依据:'书中部分依据', v_无依据:'书中无据', v_解析失败:'没有写成',
     sec_book:'书中做法', sec_weak:'这几句没能在原文里对上', sec_web:'网上的说法', sec_daily:'日常可以怎么做',
     daily_tag:'日常经验，不是《改命记实录》原文', quotes:'原文', more:'同题他章',
-    copy:'复制', copied:'已抄', useful:'有用', useless:'没用', next:'接着问', fb_thanks:'已记下，谢谢',
+    copy:'复制', copied:'已抄', copy_note:'仅供消遣，不当决定。传康KK打造的智能风水大师，有据照《改命记实录》，书里没有的已标明不是原文。', back_q:'填回这句问法', useful:'有用', useless:'没用', next:'接着问', fb_thanks:'已记下，谢谢',
     seen:'图中所见', nosee:'图没认出：', miss:'书里没覆盖的：',
     checked:'已在原文中核对到', unchecked:'未能与原文逐字匹配', open:'原文',
     speak:'听大师讲', speak_stop:'停下',
-    fu_forbid:'这一处书里还有没有不能放的东西', fu_bed:'床的朝向，书里怎么写',
-    fu_door:'门和灶、卫生间的关系，书里怎么写', fu_mirror:'镜子还忌讳对着哪里',
-    fu_taboo:'同一件事，书里还有没有禁忌', fu_daily:'书里没写到的，按日常怎么做',
+    fu_forbid:'这一处书里还有没有不能放的东西', fu_bed:'床的朝向和枕头，书里怎么写',
+    fu_door:'门和灶、卫生间的关系，书里怎么写', fu_mirror:'镜子还忌讳对着哪里，书里怎么写',
+    fu_taboo:'同一件事，书里还有没有禁忌', fu_daily:'书里没写到的，按日常一步步怎么做',
     fu_room:'换到客厅，再看同一件事', fu_city:'{city}的方位，还要不要再校一次',
     geo_ip:'按网络定到{city}，真太阳时相对北京时间 {off} 分钟。只取城市，不保存 IP。可改。',
     geo_gps:'按本机定位定到{city}，真太阳时相对北京时间 {off} 分钟。坐标只用来换算城市，不保存。',
@@ -95,8 +108,8 @@ const I18N = {
     e_network:'网络断了，检查一下连接。', e_timeout:'等得太久了，断开了。可以换个模型再试。',
     e_offline:'当前离线，恢复网络后再问。', e_http:'请求没有成功。',
     h1_sr:'卦象问道 AI 风水智能体', logo_aria:'卦象问道首页', menu:'菜单', stats_aria:'一眼看清',
-    gx_aria:'卦先生，风水大师', bubble_aria:'卦先生说：善哉，先看门向，再寻财位。', home_aria:'回到首页',
-    nav_ask:'问法', nav_compass:'罗盘', nav_model:'模型', nav_text:'原文', nav_about:'关于',
+    gx_aria:'传康KK打造的智能风水大师', bubble_aria:'传康KK打造的智能风水大师说：善哉，先看门向，再寻财位。', home_aria:'回到首页',
+    nav_ask:'问法', nav_compass:'罗盘', nav_model:'模型', nav_text:'原文', nav_evidence:'证据', nav_about:'关于',
     bub_1:'善哉～ 先看门向，', bub_2:'再寻财位。',
     bub_3:'书里有据，我才开口；', bub_4:'没有原文，我便直说没有。',
     bub_5:'问宅、问方位、问日子，', bub_6:'一句一句对着原文来。',
@@ -108,13 +121,18 @@ const I18N = {
     ev_b_t:'B · 联网搜索 [W1]', ev_b_d:'书里查不到时才用，单独列出，标明来自网上，不能当成书中依据。',
     ev_c_t:'C · 都没有', ev_c_d:'明说对不上原文，只给标注过的日常经验。',
     ev_note:'逐字对不上的句子，会单独标成「未能与原文逐字匹配」。',
-    ab_title:'关于', ab_1:'卦象问道读的是《改命记实录》（道之光，919 章，约 130 万字）。问答只从原文找依据，并标到章与段。',
+    ab_title:'关于', ab_1:'卦象问道是传康KK打造的智能风水大师，读的是《改命记实录》（道之光，919 章，约 130 万字）。问答只从原文找依据，并标到章与段。',
     ab_2:'内容来自公开网络连载，仅用于文化研读与民俗资料整理，不构成任何决策建议。', ab_read:'原文阅读', ab_pdf:'PDF 下载'
   },
   en: {
-    doc_title:'Gua Xiang · Gua, the feng shui master — checked against the book',
-    title:'Gua Xiang', sub:'Master Gua · checked against the book', side_open:'Ask', model:'Model', book:'Text', clear:'Clear',
+    doc_title:'Gua Xiang · an intelligent feng shui master built by Chuankang KK',
+    title:'Gua Xiang', sub:'Built by Chuankang KK · checked against the book', side_open:'Ask', model:'Model', book:'Text', clear:'Clear', fs:'Aa', to_end:'Latest',
     side_title:'What to ask', close:'Close', city:'City', city_ph:'Hangzhou', locate:'Locate', facing:'Door facing (°)',
+    heading:'Read phone heading', head_wait:'Hold the phone flat. Stand inside and face out the door.',
+    head_ok:'Read {deg}°. This is the phone heading, not a verdict from the book.',
+    head_no:'This device cannot read a heading. Type 0–359.',
+    head_deny:'Heading permission was denied. Allow it in the system, or type the degrees.',
+    head_miss:'No steady heading. Try again, or type the degrees.',
     respin:'Spin again', face_help:'Stand inside, face out the door, and read the phone compass. You can leave this blank.',
     ask_gua:'Ask this gua', ask_sit:'Ask the book about this facing', recent:'Asked just now', ask_ph:'Ask about the house, a direction, a day',
     sit_line:'Faces {face}, sits {sit}. From {deg}°. Not a line from the book.',
@@ -130,11 +148,11 @@ const I18N = {
     q_zhai_1:'How to arrange the entry', q_zhai_2:'How to place the bed', q_zhai_3:'Which way should the bed head face?', q_zhai_4:'How to place the study desk',
     q_ji_1:'What does the book forbid at home?', q_ji_2:'How to place mirrors', q_ji_3:'How to arrange the kitchen', q_ji_4:'The bathroom faces the door',
     q_ri_1:'What should be watched today?', q_ri_2:'How to choose a moving day', q_ri_3:'Which direction favors money this year?', q_ri_4:'The stove is seen from the door',
-    welcome:'I am Master Gua. Ask about the house, a direction, or a day. Where the book has a passage, the answer names the chapter and paragraph, and the Chinese sentence can be opened and checked.\n\nWhere the book is silent, I give a separate everyday note and say it is not a line from the book.\n\nThe city only sets direction, and a picture can be a plan or a room. Chats stay on this device until you clear them. For amusement, not a decision.',
+    welcome:'I am an intelligent feng shui master built by Chuankang KK. Ask about the house, a direction, or a day. Where the book has a passage, the answer names the chapter and paragraph, and the Chinese sentence can be opened and checked.\n\nWhere the book is silent, I give a separate everyday note and say it is not a line from the book.\n\nThe city only sets direction, and a picture can be a plan or a room. Chats stay on this device until you clear them. For amusement, not a decision.',
     v_有依据:'In the book', v_部分依据:'Partly in the book', v_无依据:'Not in the book', v_解析失败:'Unstructured',
     sec_book:'From the book', sec_weak:'These lines did not match the passage', sec_web:'From the web', sec_daily:'Everyday practice',
     daily_tag:'Everyday practice, not a line from the book', quotes:'Passage', more:'Other chapters',
-    copy:'Copy', copied:'Copied', useful:'Useful', useless:'Not useful', next:'Ask next', fb_thanks:'Noted, thank you.',
+    copy:'Copy', copied:'Copied', copy_note:'For amusement, not a decision. Built by Chuankang KK. Book lines are cited; anything else is marked as not from the book.', back_q:'Put this question back', useful:'Useful', useless:'Not useful', next:'Ask next', fb_thanks:'Noted, thank you.',
     seen:'Seen in the picture', nosee:'Picture not read: ', miss:'The book does not cover: ',
     checked:'Found verbatim in the passage', unchecked:'Not a verbatim match', open:'Text',
     speak:'Listen', speak_stop:'Stop',
@@ -163,8 +181,8 @@ const I18N = {
     e_network:'The network dropped. Check the connection.', e_timeout:'That took too long and was cut off. Try another model.',
     e_offline:'You are offline. Ask again when the connection is back.', e_http:'The request did not go through.',
     h1_sr:'Gua Xiang, an AI feng shui agent', logo_aria:'Gua Xiang home', menu:'Menu', stats_aria:'At a glance',
-    gx_aria:'Master Gua, the feng shui master', bubble_aria:'Master Gua says: check the door first, then look for the wealth corner.', home_aria:'Back to the top',
-    nav_ask:'Ask', nav_compass:'Compass', nav_model:'Models', nav_text:'Text', nav_about:'About',
+    gx_aria:'An intelligent feng shui master built by Chuankang KK', bubble_aria:'The master built by Chuankang KK says: check the door first, then look for the wealth corner.', home_aria:'Back to the top',
+    nav_ask:'Ask', nav_compass:'Compass', nav_model:'Models', nav_text:'Text', nav_evidence:'Evidence', nav_about:'About',
     bub_1:'Good. Check the door first,', bub_2:'then look for the wealth corner.',
     bub_3:'I speak only where the book has words;', bub_4:'where it is silent, I say so.',
     bub_5:'Ask about the house, a direction, a day,', bub_6:'and every line is checked against the text.',
@@ -176,7 +194,7 @@ const I18N = {
     ev_b_t:'B · Web search [W1]', ev_b_d:'Used only when the book has nothing. Listed apart and labeled as web, never as the book.',
     ev_c_t:'C · Neither', ev_c_d:'It says the book does not match, and gives only labeled everyday notes.',
     ev_note:'A sentence that does not match word for word is marked as not a verbatim match.',
-    ab_title:'About', ab_1:'Gua Xiang reads 《改命记实录》 (道之光, 919 chapters, about 1.3 million characters). Answers draw only on the book and cite chapter and paragraph.',
+    ab_title:'About', ab_1:'Gua Xiang is an intelligent feng shui master built by Chuankang KK. It reads 《改命记实录》 (道之光, 919 chapters, about 1.3 million characters). Answers draw only on the book and cite chapter and paragraph.',
     ab_2:'The text comes from a public web serial. It is for cultural study and folklore notes only, and is not advice for any decision.', ab_read:'Read the text', ab_pdf:'Download PDF'
   }
 };
@@ -195,8 +213,9 @@ function applyLang(){
   document.title = t('doc_title');
   /* data-i18n 只放在叶子上。录音和发送中的按钮不要被词条盖掉。 */
   document.querySelectorAll('[data-i18n]').forEach(node=>{
-    if(node.id==='send' && node.classList.contains('loading')) return;
+    if(node.id==='send' && (node.classList.contains('loading') || COOLDOWN_TIMER)) return;
     if(node.id==='micBtn' && node.classList.contains('rec')){ node.textContent = t('mic_stop'); return; }
+    if(node.classList.contains('speak') && node.classList.contains('on')){ node.textContent = t('speak_stop'); return; }
     node.textContent = t(node.dataset.i18n);
   });
   document.querySelectorAll('[data-i18n-ph]').forEach(node=>{ node.setAttribute('placeholder', t(node.dataset.i18nPh)); });
@@ -264,10 +283,10 @@ function paintAvatars(){
   document.querySelectorAll('[data-gx-slot]').forEach(n=>{ n.innerHTML = GX_AVATAR; });
 }
 const stage = document.querySelector('.stage');
-const narrowMq = window.matchMedia('(max-width: 720px)');
+const narrowMq = window.matchMedia('(max-width: 860px)');
 function syncStage(){
-  /* 窄屏时立绘在一条带里，要靠右对齐才看得到整个人 */
-  if(stage) stage.setAttribute('preserveAspectRatio', narrowMq.matches ? 'xMaxYMid slice' : 'xMidYMid slice');
+  /* 窄屏立绘靠右、贴上沿，帽子和眼睛留在导航下面，不裁进顶栏。 */
+  if(stage) stage.setAttribute('preserveAspectRatio', narrowMq.matches ? 'xMaxYMin slice' : 'xMidYMid slice');
 }
 narrowMq.addEventListener('change', syncStage);
 syncStage();
@@ -530,7 +549,7 @@ document.addEventListener('keydown',e=>{
   }
   if(e.key==='/' && !typing && gate.hidden && !document.querySelector('.sheet.on')){
     e.preventDefault();
-    q.focus();
+    focusAsk();
   }
 });
 modelSel.addEventListener('change',()=>{
@@ -699,7 +718,7 @@ function saveChat(){
 /* ===== 消息 ===== */
 function addUser(text, img){
   const src = img ? safeImg(img.dataUrl) : '';
-  const thumb = src ? '<img src="'+src+'" alt="上传的图片" style="max-width:100%;display:block;margin-bottom:8px;border:1px solid #bababa">' : '';
+  const thumb = src ? '<img src="'+src+'" alt="上传的图片">' : '';
   chat.appendChild(el('<div class="msg user"><div class="avatar" aria-hidden="true">我</div><div class="body"><div class="talk">'+thumb+esc(text)+'</div></div></div>'));
   syncTalk();
   scrollBottom();
@@ -830,8 +849,14 @@ function addBot(d, quiet){
   }).join('');
   const citeN=(d.quotes||[]).filter(q=>q.verified).length;
   const tag=(LANG==='en'?'Passages ':'已核对 ')+citeN+(d.cached?(LANG==='en'?' · cached':' · 缓存'):'');
-  const speakBtn='speechSynthesis' in window ? '<button class="speak" type="button" data-speak>'+esc(t('speak'))+'</button>' : '';
-  const node=el('<div class="msg bot"><div class="avatar" aria-hidden="true">'+GX_AVATAR+'</div><div class="body"><div class="card"><div class="card-head"><span class="badge '+badgeCls(d.verdict)+'" data-v="'+esc(d.verdict||'')+'">'+esc(t('v_'+(d.verdict||''))||d.verdict||'—')+'</span><span class="tag" data-cites="'+citeN+'" data-cached="'+(d.cached?'1':'0')+'">'+esc(tag)+'</span><span class="spacer"></span>'+speakBtn+'<button class="copybtn" type="button" data-i18n="copy">'+esc(t('copy'))+'</button></div><div class="conclusion"><span class="q">「</span><span class="cw"></span><span class="q">」</span><span class="caret"></span></div><div class="card-rest">'+(d.sourceNote?'<div class="note">'+esc(d.sourceNote)+'</div>':'')+pointBlock(book,'sec_book')+pointBlock(weak,'sec_weak')+pointBlock(webPts,'sec_web')+(web?'<div class="quotes"><div class="quotes-title" data-i18n="sec_web">'+esc(t('sec_web'))+'</div>'+web+'</div>':'')+(d.vision&&d.vision.ok?'<div class="visionbox"><div class="vt" data-i18n="seen">'+esc(t('seen'))+'</div>'+esc(d.vision.text)+'</div>':'')+(d.vision&&!d.vision.ok?'<div class="missing"><b data-i18n="nosee">'+esc(t('nosee'))+'</b>'+esc(d.vision.error||'')+'</div>':'')+(d.missing?'<div class="missing"><b data-i18n="miss">'+esc(t('miss'))+'</b>'+esc(d.missing)+'</div>':'')+dailyHtml+(quotes?'<div class="quotes"><div class="quotes-title" data-i18n="quotes">'+esc(t('quotes'))+'</div>'+quotes+'</div>':'')+(links.length>1?'<div class="more"><span class="lab" data-i18n="more">'+esc(t('more'))+'</span>'+links.slice(0,5).join('')+'</div>':'')+(follows?'<div class="quotes-title" data-i18n="next">'+esc(t('next'))+'</div><div class="follows">'+follows+'</div>':'')+'<div class="meta"><span>'+esc(shortModel(d.model))+'</span>'+geoSpan+'<span class="sp"></span><button class="fb" type="button" data-vote="up" data-i18n="useful">'+esc(t('useful'))+'</button><button class="fb down" type="button" data-vote="down" data-i18n="useless">'+esc(t('useless'))+'</button><span class="fb-ack" aria-live="polite"></span><span>'+(d.elapsedMs||0)+' ms</span></div></div></div></div></div>');
+  const speakBtn='speechSynthesis' in window ? '<button class="speak" type="button" data-speak data-i18n="speak">'+esc(t('speak'))+'</button>' : '';
+  /* 书里没有依据时，结论不再套成引文，避免把日常说成原文。 */
+  const plain=d.verdict==='无依据' || d.sourceLevel==='general' || d.sourceLevel==='web';
+  const quotesHtml=plain ? '' : '<span class="q">「</span>';
+  const quotesHtmlEnd=plain ? '' : '<span class="q">」</span>';
+  const backBtn=d.question?'<button class="backq" type="button" data-i18n="back_q">'+esc(t('back_q'))+'</button>':'';
+  const noteHtml=d.sourceNote?'<div class="note">'+esc(d.sourceNote)+'</div>':'';
+  const node=el('<div class="msg bot"><div class="avatar" aria-hidden="true">'+GX_AVATAR+'</div><div class="body"><div class="card"><div class="card-head"><span class="badge '+badgeCls(d.verdict)+'" data-v="'+esc(d.verdict||'')+'">'+esc(t('v_'+(d.verdict||''))||d.verdict||'—')+'</span><span class="tag" data-cites="'+citeN+'" data-cached="'+(d.cached?'1':'0')+'">'+esc(tag)+'</span><span class="spacer"></span>'+backBtn+speakBtn+'<button class="copybtn" type="button" data-i18n="copy">'+esc(t('copy'))+'</button></div><div class="conclusion">'+quotesHtml+'<span class="cw"></span>'+quotesHtmlEnd+'<span class="caret"></span></div>'+noteHtml+'<div class="card-rest">'+pointBlock(book,'sec_book')+pointBlock(weak,'sec_weak')+pointBlock(webPts,'sec_web')+(web?'<div class="quotes"><div class="quotes-title" data-i18n="sec_web">'+esc(t('sec_web'))+'</div>'+web+'</div>':'')+(d.vision&&d.vision.ok?'<div class="visionbox"><div class="vt" data-i18n="seen">'+esc(t('seen'))+'</div>'+esc(d.vision.text)+'</div>':'')+(d.vision&&!d.vision.ok?'<div class="missing"><b data-i18n="nosee">'+esc(t('nosee'))+'</b>'+esc(d.vision.error||'')+'</div>':'')+(d.missing && d.missing!=='ai_unavailable'?'<div class="missing"><b data-i18n="miss">'+esc(t('miss'))+'</b>'+esc(d.missing)+'</div>':'')+dailyHtml+(quotes?'<div class="quotes"><div class="quotes-title" data-i18n="quotes">'+esc(t('quotes'))+'</div>'+quotes+'</div>':'')+(links.length>1?'<div class="more"><span class="lab" data-i18n="more">'+esc(t('more'))+'</span>'+links.slice(0,5).join('')+'</div>':'')+(follows?'<div class="quotes-title" data-i18n="next">'+esc(t('next'))+'</div><div class="follows">'+follows+'</div>':'')+'<div class="meta"><span>'+esc(shortModel(d.model))+'</span>'+geoSpan+'<span class="sp"></span><button class="fb" type="button" data-vote="up" data-i18n="useful">'+esc(t('useful'))+'</button><button class="fb down" type="button" data-vote="down" data-i18n="useless">'+esc(t('useless'))+'</button><span class="fb-ack" aria-live="polite"></span><span>'+(d.elapsedMs||0)+' ms</span></div></div></div></div></div>');
   const rest=node.querySelector('.card-rest');
   const showRest=()=>{ if(rest) rest.classList.add('in'); };
   const cw=node.querySelector('.cw');
@@ -840,7 +865,13 @@ function addBot(d, quiet){
     if(caret) setTimeout(()=>caret.remove(), 900);
     showRest();
   }, quiet);
-  if(reduceMotion || quiet) showRest();
+  if(reduceMotion || quiet || plain) showRest();
+  const back=node.querySelector('.backq');
+  if(back) back.addEventListener('click',()=>{
+    if(q.value.trim()) return;
+    q.value=d.question;
+    q.dispatchEvent(new Event('input'));
+  });
   node.querySelectorAll('.ref').forEach(b=>{
     b.addEventListener('click',()=>{
       const target=b.dataset.web ? node.querySelector('#w-'+b.dataset.web) : node.querySelector('#q-'+b.dataset.ref);
@@ -862,7 +893,8 @@ function addBot(d, quiet){
     if(d.conclusion) lines.push(d.conclusion);
     (d.points||[]).forEach((p,i)=>lines.push((i+1)+'. '+(p.kind==='daily'?'['+t('sec_daily')+'] ':'')+p.text));
     if(d.daily) lines.push('\n'+t('daily_tag')+'\n'+d.daily);
-    (d.quotes||[]).forEach(x=>lines.push('['+x.ref+'] '+x.quote));
+    (d.quotes||[]).forEach(x=>lines.push('['+x.ref+'] '+(x.verified?'':'['+t('unchecked')+'] ')+x.quote));
+    lines.push('\n'+t('copy_note'));
     try{
       await navigator.clipboard.writeText(lines.join('\n'));
       cb.textContent=t('copied'); cb.classList.add('done');
@@ -883,7 +915,13 @@ function addBot(d, quiet){
   syncTalk();
   if(!quiet){
     const head=node.querySelector('.card-head')||node;
-    head.scrollIntoView({block:'start'});
+    if(window.matchMedia('(max-width:860px)').matches){
+      const delta=head.getBoundingClientRect().top-main.getBoundingClientRect().top;
+      main.scrollTop+=delta;
+      syncToEnd();
+    }else{
+      head.scrollIntoView({block:'start'});
+    }
   }
 }
 
@@ -898,7 +936,9 @@ function bubbleError(msg, rid, opts){
   return node;
 }
 function retryLast(){
-  if(!LAST || BUSY || COOLDOWN_TIMER) return;
+  if(BUSY) return;
+  if(COOLDOWN_TIMER){ notice(fmt(t('cool_wait'), {n:String(send.textContent).replace('s','')})); return; }
+  if(!LAST) return;
   const {text, shown, img}=LAST;
   if(img) setPendingImage(img);
   ask(text, shown);
@@ -1008,6 +1048,10 @@ async function ask(text, shown){
     if(e.name==='AbortError') msg = t('e_timeout');
     else if(e instanceof TypeError) msg = t('e_network');
     bubbleError(msg, rid, {retry:true});
+    if(!q.value.trim() && LAST && LAST.text){
+      q.value=LAST.text;
+      q.dispatchEvent(new Event('input'));
+    }
   }finally{
     if(gen!==askGen) return;
     BUSY=false;
@@ -1029,7 +1073,9 @@ function closeSide(){
 }
 function askFrom(btn){
   if(!btn||!btn.dataset.q) return;
-  const label=btn.dataset.i18n?t(btn.dataset.i18n):btn.textContent.trim();
+  const gua=btn.querySelector('[data-i18n^="gua_"]');
+  const dir=btn.querySelector('small');
+  const label=btn.dataset.i18n?t(btn.dataset.i18n):(gua&&dir?gua.textContent+' · '+dir.textContent:btn.dataset.q);
   ask(btn.dataset.q, label);
   closeSide();
 }
@@ -1042,6 +1088,22 @@ document.getElementById('sideBtn').addEventListener('click',()=>{
 });
 document.getElementById('sideClose').addEventListener('click',closeSide);
 document.getElementById('sideMask').addEventListener('click',closeSide);
+const FS_STEPS=[15,17,19];
+let fsIdx=0;
+try{
+  const savedFs=Number(localStorage.getItem('gxw_fs'));
+  if(savedFs>=0 && savedFs<FS_STEPS.length) fsIdx=savedFs;
+}catch(err){}
+function applyFs(){
+  document.documentElement.style.setProperty('--talk', FS_STEPS[fsIdx]+'px');
+}
+applyFs();
+document.getElementById('fsBtn').addEventListener('click',()=>{
+  fsIdx=(fsIdx+1)%FS_STEPS.length;
+  applyFs();
+  try{ localStorage.setItem('gxw_fs', String(fsIdx)); }catch(err){}
+  syncToEnd();
+});
 document.getElementById('langBtn').addEventListener('click',()=>{
   LANG = LANG==='en' ? 'zh' : 'en';
   applyLang();
@@ -1166,6 +1228,81 @@ document.getElementById('locBtn').addEventListener('click',()=>{
   },()=>{ setGeoKey('geo_deny'); },{enableHighAccuracy:false,timeout:8000,maximumAge:600000});
 });
 
+/* 城市名来自 /api/geo，只做输入提示，不改用户已经填过的城市。 */
+async function fillCityList(){
+  const list=document.getElementById('cityList');
+  if(!list) return;
+  try{
+    const r=await fetch('/api/geo');
+    if(!r.ok) return;
+    const d=await r.json();
+    const names=Array.isArray(d.cities)?d.cities:[];
+    const seen=new Set();
+    const frag=document.createDocumentFragment();
+    names.forEach(name=>{
+      const s=String(name||'').trim();
+      if(!s || s.length>20 || seen.has(s)) return;
+      seen.add(s);
+      const opt=document.createElement('option');
+      opt.value=s;
+      frag.appendChild(opt);
+    });
+    list.replaceChildren(frag);
+  }catch(err){}
+}
+fillCityList();
+
+/* 手机朝向只换算成 0–359 度。不使用磁偏角，也不当成书里的吉凶。iOS 必须在这次点击里申请权限。 */
+function headingFrom(ev){
+  if(ev && typeof ev.webkitCompassHeading==='number' && Number.isFinite(ev.webkitCompassHeading)){
+    return ((ev.webkitCompassHeading % 360) + 360) % 360;
+  }
+  if(ev && ev.absolute && typeof ev.alpha==='number' && Number.isFinite(ev.alpha)){
+    return ((360 - ev.alpha) % 360 + 360) % 360;
+  }
+  return null;
+}
+function commitFacing(deg){
+  const n=Math.round(((Number(deg)%360)+360)%360) % 360;
+  facingInput.value=String(n);
+  facingInput.dispatchEvent(new Event('input'));
+  facingInput.dispatchEvent(new Event('change'));
+  notice(fmt(t('head_ok'), {deg:n}));
+}
+let headTimer=null;
+function stopHeadingListen(){
+  window.removeEventListener('deviceorientation', onHeading);
+  window.removeEventListener('deviceorientationabsolute', onHeading);
+  if(headTimer){ clearTimeout(headTimer); headTimer=null; }
+}
+function onHeading(ev){
+  const deg=headingFrom(ev);
+  if(deg===null) return;
+  stopHeadingListen();
+  commitFacing(deg);
+}
+function readPhoneHeading(){
+  stopHeadingListen();
+  window.addEventListener('deviceorientation', onHeading);
+  window.addEventListener('deviceorientationabsolute', onHeading);
+  headTimer=setTimeout(()=>{
+    stopHeadingListen();
+    notice(t('head_miss'));
+  }, 2500);
+}
+document.getElementById('headBtn').addEventListener('click', async ()=>{
+  const Doe=window.DeviceOrientationEvent;
+  if(!Doe){ notice(t('head_no')); return; }
+  if(typeof Doe.requestPermission==='function'){
+    let perm='denied';
+    try{ perm=await Doe.requestPermission(); }
+    catch(err){ notice(t('head_deny')); return; }
+    if(perm!=='granted'){ notice(t('head_deny')); return; }
+  }
+  notice(t('head_wait'));
+  readPhoneHeading();
+});
+
 /* ===== 清空 ===== */
 document.getElementById('clearBtn').addEventListener('click',()=>{
   if(CHAT_LOG.length && !confirm(t('clear_q'))) return;
@@ -1200,3 +1337,5 @@ applyLang();
 renderRecent();
 detectIp();
 route();
+syncToEnd();
+window.addEventListener('resize', syncToEnd);

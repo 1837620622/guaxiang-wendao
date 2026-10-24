@@ -1,7 +1,17 @@
 const tocEl=document.getElementById('toc'), tocMeta=document.getElementById('tocMeta'),
+      hitsEl=document.getElementById('hits'),
       reader=document.getElementById('reader'), titleEl=document.getElementById('title'),
       main=document.getElementById('main'), prog=document.getElementById('progress'),
       aside=document.getElementById('aside'), mask=document.getElementById('mask');
+
+/* Safari 底栏会吃掉 100% 高度，用可视高度锁住阅读区。 */
+function syncVvh(){
+  const h=window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  document.documentElement.style.setProperty('--vvh', Math.round(h)+'px');
+}
+syncVvh();
+window.addEventListener('resize', syncVvh);
+if(window.visualViewport) window.visualViewport.addEventListener('resize', syncVvh);
 
 let TOC=[], CUR=null;
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -85,11 +95,13 @@ async function loadChapter(no){
     });
     // 定位到引用段落
     const target=targetPara;
+    try{ localStorage.setItem('gx_read_ch', String(d.no)); }catch(err){}
     if(target>0){
       const el=document.getElementById('p'+target);
       if(el){
         requestAnimationFrame(()=>setTimeout(()=>{
-          el.scrollIntoView({block:'center'});
+          const delta=el.getBoundingClientRect().top - main.getBoundingClientRect().top;
+          main.scrollTop += delta - main.clientHeight/2 + el.offsetHeight/2;
           el.classList.add('hl');
           setTimeout(()=>el.classList.remove('hl'), 3000);
         }, 120));
@@ -102,7 +114,11 @@ async function loadChapter(no){
       a.classList.toggle('active', Number(a.dataset.no)===Number(d.no));
     });
     const act=document.querySelector('#toc a.active');
-    if(act) act.scrollIntoView({block:'nearest'});
+    if(act){
+      const a=act.getBoundingClientRect();
+      const box=tocEl.getBoundingClientRect();
+      tocEl.scrollTop += (a.top - box.top) - (box.height - a.height) / 2;
+    }
   }catch(e){
     reader.innerHTML=`<div class="loading">加载失败：${esc(e.message)}</div>`;
   }
@@ -116,7 +132,60 @@ document.addEventListener('keydown',e=>{
 });
 
 document.getElementById('askBtn').addEventListener('click',()=>{location.href='/#ask'});
-/* 初始化 */
+
+/* 目录过滤仍即时。满两个字再向原文检索，点一条打开对应章和段。 */
+let searchTimer=null, searchCtrl=null;
+function hideHits(){
+  hitsEl.classList.remove('show');
+  hitsEl.hidden=true;
+  hitsEl.innerHTML='';
+}
+function showHits(html){
+  hitsEl.innerHTML=html;
+  hitsEl.hidden=false;
+  hitsEl.classList.add('show');
+}
+function jumpHit(ch, p0){
+  if(window.innerWidth<=820){ aside.classList.remove('open'); mask.classList.remove('show'); }
+  history.replaceState(null, '', '?ch='+ch+'&p='+p0);
+  loadChapter(ch);
+}
+async function searchBook(q){
+  if(searchCtrl) searchCtrl.abort();
+  searchCtrl=new AbortController();
+  try{
+    const r=await fetch('/api/search?q='+encodeURIComponent(q)+'&topK=5', {signal:searchCtrl.signal});
+    if(document.getElementById('tocSearch').value.trim()!==q) return;
+    const d=await r.json().catch(()=>null);
+    if(!r.ok || !d || !Array.isArray(d.citations)){
+      showHits('<p>原文检索没连上</p>');
+      return;
+    }
+    const rows=d.citations.slice(0,5);
+    if(!rows.length){ showHits('<p>原文里没有这段</p>'); return; }
+    showHits(rows.map(c=>{
+      const ch=numAttr(c.ch), p0=numAttr(c.p0)||'1';
+      const excerpt=esc(String(c.excerpt||'').replace(/\s+/g,' ').slice(0,80));
+      return '<button type="button" data-ch="'+ch+'" data-p="'+p0+'"><b>'+esc(c.title||'')+'</b><small>第 '+ch+' 章 · 第 '+p0+' 段</small><small>'+excerpt+'</small></button>';
+    }).join(''));
+  }catch(e){
+    if(e && e.name==='AbortError') return;
+    showHits('<p>原文检索没连上</p>');
+  }
+}
+document.getElementById('tocSearch').addEventListener('input', e=>{
+  const q=e.target.value.trim();
+  clearTimeout(searchTimer);
+  if(q.length<2){ hideHits(); return; }
+  searchTimer=setTimeout(()=>searchBook(q), 320);
+});
+hitsEl.addEventListener('click', e=>{
+  const b=e.target.closest('button');
+  if(!b || !b.dataset.ch) return;
+  jumpHit(Number(b.dataset.ch), Number(b.dataset.p)||1);
+});
+
+/* 初始化：地址里的章优先，否则打开上次读到的章。 */
 (async function(){
   try{
     const r=await fetch('/api/toc');
@@ -124,7 +193,10 @@ document.getElementById('askBtn').addEventListener('click',()=>{location.href='/
     TOC=d.chapters||[];
     renderToc();
     const params=new URLSearchParams(location.search);
-    const ch=Number(params.get('ch'))||1;
+    const fromUrl=Number(params.get('ch'));
+    let saved=0;
+    try{ saved=Number(localStorage.getItem('gx_read_ch'))||0; }catch(err){}
+    const ch=(Number.isInteger(fromUrl) && fromUrl>0) ? fromUrl : (saved>0 ? saved : 1);
     loadChapter(ch);
   }catch(e){
     tocMeta.textContent='目录加载失败';

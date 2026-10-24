@@ -340,7 +340,8 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
     ? await hashKey(history.map((h: { q: string; a: string }) => `${h.q}|${h.a}`).join("\n"))
     : "-";
   const imgFp = imageBytes ? await hashBytes(imageBytes) : "-";
-  const cacheKey = `v30:ask:${lang}:${primary}:${topK}:${geo ? geo.name : "-"}:${facing ?? "-"}:${fp}:${histFp}:${imgFp}`;
+  /* 结论也会删掉检索里没有的章号，旧缓存不能再当新答案。 */
+  const cacheKey = `v31:ask:${lang}:${primary}:${topK}:${geo ? geo.name : "-"}:${facing ?? "-"}:${fp}:${histFp}:${imgFp}`;
   if (env.CACHE) {
     try {
       const hit: any = await env.CACHE.get(cacheKey, "json");
@@ -598,6 +599,8 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
       if (conclusion.length < 20) conclusion = fb.conclusion;
       if (!missing) missing = lang === "en" ? "The book does not cover every step. Everyday practice is below." : "书中没写全的步骤，已按日常经验补在下面。";
     }
+    /* 结论里的章号必须落在这次检索到的章，否则删掉，避免写成书中引用。 */
+    conclusion = scrubFakeChapter(conclusion, chapters);
 
     const bookBacked = finalVerdict === "有依据" || finalVerdict === "部分依据";
     const hasDaily = Boolean(dailyText) || points.some((p) => p.kind === "daily");
