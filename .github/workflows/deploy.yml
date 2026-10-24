@@ -1,0 +1,56 @@
+name: Deploy
+
+# 推送到 main 就发布到 Cloudflare Workers（先跑测试）。
+# 需要在仓库 Settings → Secrets and variables → Actions 里配置：
+#   CLOUDFLARE_API_TOKEN   （Edit Cloudflare Workers 模板，限定到本账号和 chuankangkk.top）
+#   CLOUDFLARE_ACCOUNT_ID  （Cloudflare 控制台右侧的 Account ID）
+# 没配 CLOUDFLARE_API_TOKEN 时，部署步骤会跳过并给出提示，不会让 main 变红。
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: 测试并部署
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: cf-agent/package-lock.json
+      - name: 检查部署密钥
+        id: secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -n "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::未配置 CLOUDFLARE_API_TOKEN，跳过部署。见 cf-agent/README.md 的「自动发布」。"
+          fi
+      - name: 安装依赖并测试
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: cf-agent
+        run: |
+          npm ci
+          npm test
+      - name: 部署到 Workers
+        if: steps.secrets.outputs.ready == 'true'
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cf-agent
+          command: deploy

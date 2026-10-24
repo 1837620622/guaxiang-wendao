@@ -89,6 +89,48 @@ test("静态页面带上安全头", async () => {
   assert.equal(res.headers.get("Referrer-Policy"), "no-referrer");
 });
 
+test("页面不再允许外部媒体（立绘是内联 SVG）", async () => {
+  const res = await worker.fetch(req("/"), env());
+  const csp = res.headers.get("Content-Security-Policy") || "";
+  assert.match(csp, /media-src 'none'/);
+  assert.doesNotMatch(csp, /cloudfront/);
+});
+
+/** KV 桩：每个键都返回一个很大的计数，相当于本分钟已经超限 */
+const fullKv = {
+  get: async () => "999",
+  put: async () => undefined,
+};
+
+test("限流返回 429，并带 Retry-After 头和正文里的 retryAfter", async () => {
+  const res = await worker.fetch(
+    req("/api/ask", { method: "POST", headers: { "Content-Type": "application/json", Origin: ORIGIN }, body: "{}" }),
+    env({ CACHE: fullKv })
+  );
+  assert.equal(res.status, 429);
+  assert.equal(res.headers.get("Retry-After"), "60");
+  const data = (await res.json()) as any;
+  assert.equal(data.error, "too_many_requests_per_minute");
+  assert.equal(data.retryAfter, 60);
+});
+
+test("每个响应都带 X-Request-Id；合法的上游编号原样沿用", async () => {
+  const res = await worker.fetch(req("/api/geo?q=toString", { headers: { "X-Request-Id": "abc-12345678" } }), env());
+  assert.equal(res.headers.get("X-Request-Id"), "abc-12345678");
+});
+
+test("上游编号不合法时自己生成，仍然带头", async () => {
+  const res = await worker.fetch(req("/api/geo?q=toString", { headers: { "X-Request-Id": "bad id!!" } }), env());
+  const rid = res.headers.get("X-Request-Id") || "";
+  assert.match(rid, /^[0-9a-f-]{36}$/);
+});
+
+test("模型清单允许缓存十分钟", async () => {
+  const res = await worker.fetch(req("/api/models"), env());
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("Cache-Control"), "public, max-age=600");
+});
+
 test("模型请求过了截止时间就不再换钥匙、不再发请求", async () => {
   let calls = 0;
   globalThis.fetch = (async () => {

@@ -27,17 +27,16 @@ const SEC_HEADERS: Record<string, string> = {
 
 /**
  * 页面与静态资源的安全头。页面是内联脚本和样式，所以 script/style 放行 'unsafe-inline'；
- * 外部只放行 Google 字体和首页视频所在的域名，其余一律禁止。
+ * 外部只放行 Google 字体。首页立绘是内联 SVG，不加载任何媒体文件。
  */
-const MEDIA_HOST = "https://d8j0ntlcm91z4.cloudfront.net";
 const PAGE_HEADERS: Record<string, string> = {
   "Content-Security-Policy": [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
-    `img-src 'self' data: blob: ${MEDIA_HOST}`,
-    `media-src 'self' ${MEDIA_HOST}`,
+    "img-src 'self' data: blob:",
+    "media-src 'none'",
     "connect-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
@@ -61,6 +60,12 @@ function json(data: unknown, status = 200, extra: Record<string, string> = {}) {
 
 function err(code: string, status: number) {
   return json({ error: code }, status);
+}
+
+/** 限流：告诉客户端多少秒后再试（头和正文都给，前端两个都认） */
+const RETRY_AFTER_S = 60;
+function tooMany(reason?: string) {
+  return json({ error: reason ?? "too_many_requests", retryAfter: RETRY_AFTER_S }, 429, { "Retry-After": String(RETRY_AFTER_S) });
 }
 
 /**
@@ -257,7 +262,7 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
   const deadline = t0 + ASK_BUDGET_MS;
 
   const rl = await rateLimit(env, ip, "ask");
-  if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
+  if (!rl.ok) return tooMany(rl.reason);
 
   const packed = await readJsonLimited(request, MAX_JSON_BYTES);
   if (!packed.ok) return err(packed.error, packed.status);
@@ -649,7 +654,7 @@ async function handleSearch(request: Request, env: Env, ip: string): Promise<Res
   const q = searchText(qRaw, lang);
 
   const rl = await rateLimit(env, ip, "search");
-  if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
+  if (!rl.ok) return tooMany(rl.reason);
 
   const nRaw = Number(url.searchParams.get("topK"));
   const topK = Number.isFinite(nRaw) ? Math.min(Math.max(Math.trunc(nRaw), 1), 8) : 5;
@@ -761,7 +766,7 @@ async function handleChapter(env: Env, url: URL): Promise<Response> {
 /* ===== 反馈 & 统计 ===== */
 async function handleFeedback(request: Request, env: Env, ip: string): Promise<Response> {
   const rl = await rateLimit(env, ip, "feedback");
-  if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
+  if (!rl.ok) return tooMany(rl.reason);
   const packed = await readJsonLimited(request, 4096);
   if (!packed.ok) return err(packed.error, packed.status);
   const body = packed.body;
@@ -837,8 +842,19 @@ function whereFromEdge(request: Request, url: URL) {
   };
 }
 
-export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+/** 每个请求一个编号：沿用合法的上游编号，否则生成。写进响应头，前端出错时显示，方便对日志。 */
+function requestId(request: Request): string {
+  const given = request.headers.get("X-Request-Id") || "";
+  return /^[A-Za-z0-9-]{8,64}$/.test(given) ? given : crypto.randomUUID();
+}
+
+function withRequestId(res: Response, rid: string): Response {
+  const headers = new Headers(res.headers);
+  headers.set("X-Request-Id", rid);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
+}
+
+async function dispatch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: { ...SEC_HEADERS, "Allow": "GET,POST,OPTIONS" } });
@@ -855,11 +871,11 @@ export default {
     if (url.pathname === "/api/search" && request.method === "GET") return handleSearch(request, env, ip);
     if (url.pathname === "/api/health") return handleHealth(env);
     if (url.pathname === "/api/models") {
-      return json({ default: env.MODEL || DEFAULT_MODEL, models: MODELS });
+      return json({ default: env.MODEL || DEFAULT_MODEL, models: MODELS }, 200, { "Cache-Control": "public, max-age=600" });
     }
     if (url.pathname === "/api/vision" && request.method === "POST") {
       const rl = await rateLimit(env, ip, "ask");
-      if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
+      if (!rl.ok) return tooMany(rl.reason);
       const packed = await readJsonLimited(request, MAX_JSON_BYTES);
       if (!packed.ok) return err(packed.error, packed.status);
       const raw = typeof packed.body?.image === "string" ? packed.body.image : "";
@@ -880,7 +896,7 @@ export default {
       if (!q) return err("q_required", 400);
       if (q.length > 80) return err("q_too_long", 400);
       const rl = await rateLimit(env, ip, "search");
-      if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
+      if (!rl.ok) return tooMany(rl.reason);
       try {
         const t0 = Date.now();
         const results = await webSearch(q, 5);
@@ -901,5 +917,11 @@ export default {
     }
 
     return withPageHeaders(await env.ASSETS.fetch(request));
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const rid = requestId(request);
+    return withRequestId(await dispatch(request, env), rid);
   },
 };

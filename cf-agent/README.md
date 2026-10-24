@@ -175,8 +175,10 @@
 
 ## 三、前端
 
-**首屏** `/`：按 Hero 规格实现（视频、像素标题「卦象问道 / AI AGENT」、气泡、导航）。
-「开始问道」滚到问答区；「罗盘」「模型」「关于」「看它怎么找原文」用锚点打开对应层，罗盘只在点开时出现。
+**首屏** `/`：按 Hero 规格实现（像素标题「卦象问道 / AI AGENT」、气泡、导航）。主角是**卦先生**，一幅用格子画出来的像素立绘（道冠、长须、罗盘、拂尘、符纸），由 `scripts/make_master.py` 生成，扫描线靠 mask 叠出来；胡须、罗盘、眨眼、符纸各自一层动画，减少动态效果时全部停下。
+气泡的台词每 6 秒轮换一次。「开始问道」滚到问答区；「罗盘」「模型」「关于」「看它怎么找原文」用锚点打开对应层，罗盘只在点开时出现。
+
+**对话**（都在本机，不上传）：刷新后保留最近 30 轮；失败的问题可以「再试一次」（图片也会保留）；限流时按服务端给的秒数倒计时；每条答案可以「听大师讲」（浏览器不支持就不显示）；出错时显示请求编号，方便对日志。键盘 `/` 聚焦输入框，清空前会确认。
 
 **问答页** `/#ask`
 - 引用 chip 点击 → 展开对应原文并高亮
@@ -226,6 +228,28 @@ wrangler deploy
 ```
 
 改了原文数据后：`python3 scripts/build_chapters.py && ./import.sh && wrangler deploy`
+
+### 自动发布
+
+仓库根目录的 `.github/workflows/`：
+
+| 工作流 | 触发 | 做什么 |
+|---|---|---|
+| `ci.yml` | 每次 push、每个 PR | `npm test`（类型检查 + 单元测试），不需要密钥 |
+| `deploy.yml` | 推送到 `main`，或在 Actions 页面手动运行 | 先测试，再 `wrangler deploy` 发布到 Workers |
+
+**PR 合并进 `main` 才会发布。** 推送到功能分支只跑测试，不影响线上。
+
+第一次使用需要在 GitHub 仓库 `Settings → Secrets and variables → Actions` 里添加两个密钥：
+
+- `CLOUDFLARE_API_TOKEN`：在 Cloudflare 控制台新建 API Token，选 **Edit Cloudflare Workers** 模板，并限定到本账号和 `chuankangkk.top` 域名。
+- `CLOUDFLARE_ACCOUNT_ID`：Cloudflare 控制台右侧栏的 Account ID。
+
+没有配置 `CLOUDFLARE_API_TOKEN` 时，`deploy.yml` 会跳过部署并在日志里提示，不会让 `main` 变红。
+
+另一种做法是在 Cloudflare 控制台的 Workers Builds 里连接这个仓库（分支 `main`，根目录 `cf-agent`）。两种方式同时开会发布两次，选一种就行。
+
+**不会自动发布的情况**：D1 数据（`chapters` 表）和 KV 不随代码部署，改了原文仍要按上面的命令重新导入。
 
 ---
 
