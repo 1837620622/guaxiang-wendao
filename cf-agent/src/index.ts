@@ -307,31 +307,36 @@ function everydayFallback(question: string, lang: "zh" | "en" = "zh"): { conclus
   };
 }
 
+/** 整词匹配。southeast 不能再被 east 拆成正东。 */
+function wordRe(body: string): RegExp {
+  return new RegExp("(?<![a-z-])(?:" + body + ")(?![a-z-])", "i");
+}
+
 /** 英文提问时给检索补中文词，书是中文的。 */
 function searchText(question: string, lang: "zh" | "en"): string {
   const zhCount = (question.match(/[\u4e00-\u9fff]/g) || []).length;
   if (lang !== "en" && zhCount >= 2) return question;
   const pairs: [RegExp, string][] = [
-    [/wealth|money|fortune|cash/i, "财位"],
-    [/living\s*room|lounge/i, "客厅"],
-    [/bed|pillow|bedroom/i, "卧室 床头"],
-    [/kitchen|stove/i, "厨房 灶"],
-    [/bath|toilet|restroom/i, "卫生间"],
-    [/mirror/i, "镜子"],
-    [/door|entrance|entry/i, "大门 玄关"],
-    [/fish/i, "鱼缸"],
-    [/study|desk/i, "书房"],
-    [/mov(?:e|ing)|calendar/i, "搬家 日子"],
-    [/taboo|avoid|forbid/i, "禁忌"],
-    [/north/i, "坎 北"],
-    [/south/i, "离 南"],
-    [/east/i, "震 东"],
-    [/west/i, "兑 西"],
-    [/southeast|south-east/i, "巽 东南"],
-    [/northeast|north-east/i, "艮 东北"],
-    [/southwest|south-west/i, "坤 西南"],
-    [/northwest|north-west/i, "乾 西北"],
-    [/clutter|mess/i, "杂物"],
+    [wordRe("wealth|money|fortune|cash"), "财位"],
+    [wordRe("living\\s*room|lounge"), "客厅"],
+    [wordRe("bed(?:room)?|pillow"), "卧室 床头"],
+    [wordRe("kitchen|stove"), "厨房 灶"],
+    [wordRe("bath(?:room)?|toilet|restroom"), "卫生间"],
+    [wordRe("mirror"), "镜子"],
+    [wordRe("door|entrance|entry"), "大门 玄关"],
+    [wordRe("fish(?:\\s*tank)?"), "鱼缸"],
+    [wordRe("study|desk"), "书房"],
+    [wordRe("move|moving|calendar"), "搬家 日子"],
+    [wordRe("taboo|avoid|forbid"), "禁忌"],
+    [wordRe("southeast|south-east"), "巽 东南"],
+    [wordRe("northeast|north-east"), "艮 东北"],
+    [wordRe("southwest|south-west"), "坤 西南"],
+    [wordRe("northwest|north-west"), "乾 西北"],
+    [wordRe("north"), "坎 北"],
+    [wordRe("south"), "离 南"],
+    [wordRe("east"), "震 东"],
+    [wordRe("west"), "兑 西"],
+    [wordRe("clutter|mess"), "杂物"],
   ];
   const extra = pairs.filter(([re]) => re.test(question)).map(([, zh]) => zh);
   return extra.length ? `${question} ${extra.join(" ")}` : question;
@@ -352,9 +357,11 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
   if (!question && !hasImg) return err("question_required", 400);
   if (question.length > 400) return err("question_too_long", 400);
   const lang: "zh" | "en" = body?.lang === "en" ? "en" : "zh";
-  if (!hasImg && (question.match(/[\u4e00-\u9fff]/g) || []).length < 2 && question.length < 4) {
+  const han = (question.match(/[\u4e00-\u9fff]/g) || []).length;
+  const tooShort = lang === "en" ? question.length < 3 : han < 2 && question.length < 4;
+  if (!hasImg && tooShort) {
     const hint = lang === "en"
-      ? "Type at least two words, for example kitchen, door, or bed."
+      ? "Type at least three letters, for example bed, door, or kitchen."
       : "至少输入两个字，例如「财位」「厨房」「大门」";
     return json({ error: "question_too_short", hint }, 400);
   }
@@ -419,7 +426,7 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
     ? await hashKey(history.map((h: { q: string; a: string }) => `${h.q}|${h.a}`).join("\n"))
     : "-";
   const imgFp = imageBytes ? await hashBytes(imageBytes) : "-";
-  const cacheKey = `v29:ask:${lang}:${primary}:${topK}:${geo ? geo.name : "-"}:${facing ?? "-"}:${fp}:${histFp}:${imgFp}`;
+  const cacheKey = `v30:ask:${lang}:${primary}:${topK}:${geo ? geo.name : "-"}:${facing ?? "-"}:${fp}:${histFp}:${imgFp}`;
   if (env.CACHE) {
     try {
       const hit: any = await env.CACHE.get(cacheKey, "json");
@@ -723,7 +730,9 @@ async function handleSearch(request: Request, env: Env, ip: string): Promise<Res
   const url = new URL(request.url);
   const qRaw = (url.searchParams.get("q") ?? "").trim();
   if (!qRaw) return err("q_required", 400);
-  if (qRaw.length > 60) return err("q_too_long", 400);
+  if (qRaw.length > 400) return err("q_too_long", 400);
+  const lang = url.searchParams.get("lang") === "en" ? "en" : "zh";
+  const q = searchText(qRaw, lang);
 
   const rl = await rateLimit(env, ip, "search");
   if (!rl.ok) return json({ error: rl.reason, retryAfter: 60 }, 429);
@@ -733,7 +742,7 @@ async function handleSearch(request: Request, env: Env, ip: string): Promise<Res
 
   let hits: SearchHit[];
   try {
-    hits = await retrieve(env, qRaw, topK);
+    hits = await retrieve(env, q, topK);
   } catch (e) {
     console.error("search retrieval failed", e);
     return err("retrieval_unavailable", 502);

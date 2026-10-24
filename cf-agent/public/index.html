@@ -47,7 +47,8 @@
     border-bottom:1px solid var(--ink);
     background:var(--paper2);
   }
-  .brand{max-width:860px;margin:0 auto;display:flex;align-items:center;gap:10px}
+  .brand{max-width:860px;margin:0 auto;display:flex;align-items:center;gap:10px;min-width:0}
+  .brand-text{min-width:0;flex:1}
   .seal{
     width:36px;height:36px;flex:none;
     display:grid;place-items:center;
@@ -55,12 +56,16 @@
     font-size:18px;letter-spacing:0;
     border:1px solid var(--ink);
   }
-  h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.12em}
-  .sub{margin-top:1px;font-size:12px;color:var(--ink2);letter-spacing:.04em;font-family:"PingFang SC","Hiragino Sans GB",-apple-system,sans-serif}
-  .hbtns{margin-left:auto;display:flex;gap:0;border:1px solid var(--ink)}
+  h1{margin:0;font-size:18px;font-weight:600;letter-spacing:.12em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sub{margin-top:1px;font-size:12px;color:var(--ink2);letter-spacing:.04em;font-family:"PingFang SC","Hiragino Sans GB",-apple-system,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hbtns{
+    margin-left:auto;display:flex;gap:0;border:1px solid var(--ink);
+    flex:none;max-width:64%;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch;
+  }
+  .hbtns::-webkit-scrollbar{display:none;height:0}
   .hbtn{
     min-height:44px;padding:0 10px;border:0;border-right:1px solid var(--ink);
-    background:var(--paper2);font-size:13px;letter-spacing:.06em;
+    background:var(--paper2);font-size:13px;letter-spacing:.06em;flex:none;
   }
   .hbtn:last-child{border-right:0}
   .hbtn:active{background:var(--ink);color:var(--paper2)}
@@ -220,7 +225,7 @@
   }
   #send{background:var(--red);color:var(--paper2);border-color:var(--ink)}
   #send.loading{background:#5c5346}
-  #micBtn.rec{background:var(--red);color:var(--paper2)}
+  #micBtn.rec{background:var(--red);color:var(--paper2);width:auto;padding:0 8px}
   #micBtn[hidden]{display:none}
   textarea{
     flex:1;min-height:44px;max-height:132px;resize:none;
@@ -542,7 +547,7 @@
 <header>
   <div class="brand">
     <div class="seal">卦</div>
-    <div>
+    <div class="brand-text">
       <h1 data-i18n="title">卦象问道</h1>
       <div class="sub" data-i18n="sub">改命记实录 · 有据照书</div>
     </div>
@@ -665,14 +670,14 @@
       </div>
       <button class="imgdel" id="imgDel" type="button" aria-label="移除图片">删</button>
     </div>
-    <div class="dropzone">松开，加入这张图</div>
+    <div class="dropzone" data-i18n="drop">松开，加入这张图</div>
   </div>
   <div class="bar">
     <button id="imgBtn" type="button" title="上传户型或房间照片" aria-label="上传图片">图</button>
     <input type="file" id="imgInput" accept="image/*" hidden>
-    <button id="micBtn" type="button" title="语音输入" aria-label="语音输入" hidden>声</button>
+    <button id="micBtn" type="button" title="语音输入" aria-label="语音输入" data-i18n="mic" hidden>声</button>
     <textarea id="q" rows="1" placeholder="问宅、问方位、问日子" data-i18n-ph="ask_ph" enterkeyhint="send"></textarea>
-    <button id="send" type="button" title="发送" aria-label="发送问题">问</button>
+    <button id="send" type="button" title="发送" aria-label="发送问题" data-i18n="send">问</button>
   </div>
   <div class="hint" data-i18n="hint">书中有据照原文，没有就按日常说清楚 · 仅供消遣</div>
 </footer>
@@ -752,6 +757,11 @@ const I18N = {
     geo_wait:'正在看本机位置…', geo_deny:'没有拿到定位权限，仍可用城市名。', geo_miss:'没有识别到城市，请直接填写。', geo_no:'这台设备没有定位。',
     typing:'翻书', typing_img:'看图', typing_n:'翻到 {n} 段', typing_0:'书里没翻到',
     err:'出错了：', again:'再试一次。', onlyimg:'（只看这张图）',
+    send:'问', send_label:'发送问题',
+    mic:'声', mic_stop:'停', mic_label:'语音输入',
+    mic_deny:'麦克风权限被拒绝，请在浏览器里允许后重试',
+    img_bad:'不是图片文件', img_read:'图片读取失败', img_work:'处理中', img_zip:'已压缩',
+    img_err:'图片处理失败：', img_up:'上传户型或房间照片', drop:'松开，加入这张图',
     pan:'本盘落在{gua} · {dir}'
   },
   en: {
@@ -788,6 +798,11 @@ const I18N = {
     geo_wait:'Reading this device…', geo_deny:'Location permission was denied. Type a city instead.', geo_miss:'No city recognized. Type one.', geo_no:'This device has no location.',
     typing:'Reading', typing_img:'Looking', typing_n:'Found {n}', typing_0:'Nothing in the book',
     err:'Something went wrong: ', again:'Try again.', onlyimg:'(picture only)',
+    send:'Ask', send_label:'Send',
+    mic:'Mic', mic_stop:'Stop', mic_label:'Voice input',
+    mic_deny:'Microphone permission was denied. Allow it in the browser and try again.',
+    img_bad:'Not an image file', img_read:'Could not read the image', img_work:'Working', img_zip:'compressed',
+    img_err:'Could not use this image: ', img_up:'Upload a plan or a room photo', drop:'Drop to add this picture',
     pan:'Plate stopped on {gua} · {dir}'
   }
 };
@@ -796,16 +811,73 @@ function t(k){ return (I18N[LANG] && I18N[LANG][k]) || I18N.zh[k] || k; }
 function applyLang(){
   document.documentElement.lang = LANG === 'en' ? 'en' : 'zh-CN';
   document.title = t('title');
-  document.querySelectorAll('[data-i18n]').forEach(node=>{ node.textContent = t(node.dataset.i18n); });
+  /* data-i18n 只放在叶子上。录音和发送中的按钮不要被词条盖掉。 */
+  document.querySelectorAll('[data-i18n]').forEach(node=>{
+    if(node.id==='send' && node.classList.contains('loading')) return;
+    if(node.id==='micBtn' && node.classList.contains('rec')){ node.textContent = t('mic_stop'); return; }
+    node.textContent = t(node.dataset.i18n);
+  });
   document.querySelectorAll('[data-i18n-ph]').forEach(node=>{ node.setAttribute('placeholder', t(node.dataset.i18nPh)); });
   const langBtn = document.getElementById('langBtn');
   if(langBtn) langBtn.textContent = LANG === 'en' ? '中' : 'EN';
   document.querySelectorAll('[data-v]').forEach(node=>{ node.textContent = t('v_'+node.dataset.v); });
+  paintMarked();
+  paintGeo();
+  const mic = document.getElementById('micBtn');
+  if(mic){ mic.title = t('mic_label'); mic.setAttribute('aria-label', t('mic_label')); }
+  const imgB = document.getElementById('imgBtn');
+  if(imgB){ imgB.title = t('img_up'); imgB.setAttribute('aria-label', t('img_up')); }
+  const sendB = document.getElementById('send');
+  if(sendB && !sendB.classList.contains('loading')){
+    sendB.title = t('send_label');
+    sendB.setAttribute('aria-label', t('send_label'));
+  }
+  const size = document.getElementById('imgSize');
+  if(size && size.dataset.kb) size.textContent = size.dataset.kb+' KB · '+t('img_zip');
   try{ localStorage.setItem('gxw_lang', LANG); }catch(err){}
+}
+/* 章节位置、核对条数、真太阳时、追问里的城市名，切换语言时重画。答案正文不改。 */
+function paintMarked(){
+  document.querySelectorAll('[data-where]').forEach(node=>{
+    const raw = String(node.dataset.where||'');
+    if(!/^\d{0,5}:\d{0,5}:\d{0,5}$/.test(raw)) return;
+    const parts = raw.split(':');
+    const ch = parts[0]||'?';
+    const p0 = parts[1]||'?';
+    const p1 = parts[2]||'?';
+    node.textContent = LANG==='en'
+      ? 'Ch. '+ch+' · ¶ '+p0+'–'+p1
+      : '第 '+ch+' 章 · 第 '+p0+'–'+p1+' 段';
+  });
+  document.querySelectorAll('[data-cites]').forEach(node=>{
+    const n = String(node.dataset.cites||'0').replace(/\D/g,'') || '0';
+    const cached = node.dataset.cached === '1';
+    node.textContent = (LANG==='en'?'Passages ':'已核对 ')+n+(cached?(LANG==='en'?' · cached':' · 缓存'):'');
+  });
+  document.querySelectorAll('[data-goff]').forEach(node=>{
+    const name = node.dataset.gname || '';
+    const off = Number(node.dataset.goff);
+    if(!name || !Number.isFinite(off)) return;
+    const body = LANG==='en'
+      ? name+' · solar '+(off>=0?'+':'')+off+' min'
+      : name+' · 真太阳时 '+(off>=0?'+':'')+off+' 分';
+    node.textContent = ' · '+body;
+  });
+  document.querySelectorAll('a[data-ch]').forEach(node=>{
+    const ch = String(node.dataset.ch||'').replace(/\D/g,'');
+    if(!ch) return;
+    node.textContent = (LANG==='en'?'Ch. ':'第')+ch+(LANG==='en'?' ':'章 ')+(node.dataset.title||'');
+  });
+  document.querySelectorAll('[data-city]').forEach(node=>{
+    const city = node.dataset.city || '';
+    if(!city) return;
+    node.textContent = t('fu_city').replace('{city}', city);
+  });
 }
 
 const facingInput = document.getElementById('facing');
 const geoNote = document.getElementById('geoNote');
+let geoState = null;
 cityInput.value = localStorage.getItem('gxw_city') || '';
 if(!localStorage.getItem('gxw_city_src') && cityInput.value.trim()) localStorage.setItem('gxw_city_src','user');
 facingInput.value = localStorage.getItem('gxw_facing') || '';
@@ -1059,7 +1131,7 @@ const MAX_EDGE = 1280, MAX_KB = 3500;
 
 function compressImage(file){
   return new Promise((resolve,reject)=>{
-    if(!/^image\//.test(file.type)) return reject(new Error('不是图片文件'));
+    if(!/^image\//.test(file.type)) return reject(new Error('img_bad'));
     const url=URL.createObjectURL(file);
     const img=new Image();
     img.onload=()=>{
@@ -1079,7 +1151,7 @@ function compressImage(file){
       }
       resolve({dataUrl:out, name:file.name||'image.jpg', kb:Math.round(out.length/1024)});
     };
-    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('图片读取失败')); };
+    img.onerror=()=>{ URL.revokeObjectURL(url); reject(new Error('img_read')); };
     img.src=url;
   });
 }
@@ -1088,22 +1160,30 @@ function setPendingImage(img){
   if(!img){ imgWrap.classList.remove('on'); return; }
   imgPrev.src=img.dataUrl;
   imgName.textContent=img.name;
-  imgSize.textContent=img.kb+' KB · 已压缩';
+  imgSize.dataset.kb=String(img.kb);
+  imgSize.textContent=img.kb+' KB · '+t('img_zip');
   imgWrap.classList.add('on');
 }
 async function pickImage(file){
   if(!file) return;
   const gen=++pickGen;
-  imgSize.textContent='处理中';
+  imgSize.textContent=t('img_work');
   try{
     const img=await compressImage(file);
     if(gen!==pickGen) return;
     setPendingImage(img);
   }catch(e){
     if(gen!==pickGen) return;
-    imgSize.textContent=PENDING_IMG?(PENDING_IMG.kb+' KB · 已压缩'):'';
-    if(!PENDING_IMG) imgWrap.classList.remove('on');
-    alert('图片处理失败：'+e.message);
+    if(PENDING_IMG){
+      imgSize.dataset.kb=String(PENDING_IMG.kb);
+      imgSize.textContent=PENDING_IMG.kb+' KB · '+t('img_zip');
+    }else{
+      delete imgSize.dataset.kb;
+      imgSize.textContent='';
+      imgWrap.classList.remove('on');
+    }
+    const known = e && e.message && (I18N.zh[e.message] || I18N.en[e.message]);
+    alert(t('img_err')+(known ? t(e.message) : (e && e.message ? e.message : '')));
   }
 }
 imgBtn.addEventListener('click',()=>imgInput.click());
@@ -1157,7 +1237,7 @@ window.addEventListener('paste',e=>{
       rec.interimResults = true;
       rec.continuous = false;
       let base = q.value ? q.value + ' ' : '';
-      rec.onstart = ()=>{ recording=true; btn.classList.add('rec'); btn.textContent='停'; };
+      rec.onstart = ()=>{ recording=true; btn.classList.add('rec'); btn.textContent=t('mic_stop'); };
       rec.onresult = (ev)=>{
         let txt='';
         for(let i=ev.resultIndex;i<ev.results.length;i++) txt += ev.results[i][0].transcript;
@@ -1166,10 +1246,10 @@ window.addEventListener('paste',e=>{
         q.style.height=Math.min(q.scrollHeight,132)+'px';
       };
       rec.onerror = (ev)=>{
-        recording=false; btn.classList.remove('rec'); btn.textContent='声';
-        if(ev.error==='not-allowed') alert('麦克风权限被拒绝，请在浏览器里允许后重试');
+        recording=false; btn.classList.remove('rec'); btn.textContent=t('mic');
+        if(ev.error==='not-allowed') alert(t('mic_deny'));
       };
-      rec.onend = ()=>{ recording=false; btn.classList.remove('rec'); btn.textContent='声'; };
+      rec.onend = ()=>{ recording=false; btn.classList.remove('rec'); btn.textContent=t('mic'); };
       rec.start();
     }catch(err){}
   });
@@ -1217,22 +1297,23 @@ function refBtns(refs){
     return '<button type="button" class="ref" data-ref="'+esc(s)+'">['+esc(s)+']</button>';
   }).join('');
 }
-function pointBlock(list, title){
+function pointBlock(list, key){
   if(!list.length) return '';
   const body=list.map((p,i)=>'<div class="point'+(p.kind==='book'&&!p.verified?' weak':'')+'"><div class="num">'+(i+1)+'</div><div class="txt">'+esc(p.text)+refBtns(p.refs)+'</div></div>').join('');
-  return (title?'<div class="quotes-title">'+esc(title)+'</div>':'')+'<div class="points">'+body+'</div>';
+  const head=key?'<div class="quotes-title" data-i18n="'+esc(key)+'">'+esc(t(key))+'</div>':'';
+  return head+'<div class="points">'+body+'</div>';
 }
 function followUps(question){
   const s=String(question||'');
   const out=[];
-  if(/财|钱|摆|wealth|money/i.test(s)) out.push({q:'这一处书里还有没有不能放的东西', k:'fu_forbid'});
+  if(/财|钱|wealth|money|fortune/i.test(s)) out.push({q:'这一处书里还有没有不能放的东西', k:'fu_forbid'});
   else if(/床|卧|bed/i.test(s)) out.push({q:'床的朝向和枕头，书里怎么写', k:'fu_bed'});
-  else if(/门|玄关|灶|厕|卫|door|bath|kitchen/i.test(s)) out.push({q:'门和灶、卫生间的关系，书里怎么写', k:'fu_door'});
+  else if(/门|玄关|灶|厨|厕|卫|door|bath|kitchen/i.test(s)) out.push({q:'门和灶、卫生间的关系，书里怎么写', k:'fu_door'});
   else if(/镜|mirror/i.test(s)) out.push({q:'镜子还忌讳对着哪里，书里怎么写', k:'fu_mirror'});
   else out.push({q:'同一件事，书里还有没有禁忌', k:'fu_taboo'});
   out.push({q:'书里没写到的，按日常一步步怎么做', k:'fu_daily'});
   const city=cityInput.value.trim();
-  if(city) out.push({q:city+'的方位，还要不要再校一次', label:t('fu_city').replace('{city}', city)});
+  if(city) out.push({q:city+'的方位，还要不要再校一次', city:city});
   else out.push({q:'换到客厅，再看同一件事', k:'fu_room'});
   return out;
 }
@@ -1246,12 +1327,14 @@ function addBot(d){
     const c=(d.citations||[]).find(x=>x.n===qq.ref)||{};
     const title=(c.title||'').replace(/^第\d+[章篇]?\s*/,'');
     const ch=chapNo(c.ch), p0=chapNo(c.p0), p1=chapNo(c.p1);
+    const whereAttr=(ch||'')+':'+(p0||'')+':'+(p1||'');
     const where=LANG==='en'
       ? 'Ch. '+(ch||'?')+' · ¶ '+(p0||'?')+'–'+(p1||'?')
       : '第 '+(ch||'?')+' 章 · 第 '+(p0||'?')+'–'+(p1||'?')+' 段';
     const open=qq.verified && !opened ? (opened=true,' open') : '';
-    const openLink=ch?'<a class="open-orig" href="/read?ch='+ch+(p0?'&p='+p0:'')+'" target="_blank" rel="noopener">'+esc(t('open'))+'</a>':'';
-    return '<details class="q" id="q-'+esc(qq.ref)+'"'+open+'><summary><span class="qno">['+esc(qq.ref)+']</span><span class="qmeta"><span class="t">'+esc(title||t('quotes'))+'</span><span class="p">'+esc(where)+'</span></span><span class="chev">▶</span></summary><div class="qtext">'+esc(qq.quote)+'<span class="verify '+(qq.verified?'ok':'bad')+'">'+esc(qq.verified?t('checked'):t('unchecked'))+'</span>'+(openLink?'<div class="more">'+openLink+'</div>':'')+'</div></details>';
+    const vKey=qq.verified?'checked':'unchecked';
+    const openLink=ch?'<a class="open-orig" data-i18n="open" href="/read?ch='+ch+(p0?'&p='+p0:'')+'" target="_blank" rel="noopener">'+esc(t('open'))+'</a>':'';
+    return '<details class="q" id="q-'+esc(qq.ref)+'"'+open+'><summary><span class="qno">['+esc(qq.ref)+']</span><span class="qmeta"><span class="t">'+esc(title||t('quotes'))+'</span><span class="p" data-where="'+whereAttr+'">'+esc(where)+'</span></span><span class="chev">▶</span></summary><div class="qtext">'+esc(qq.quote)+'<span class="verify '+(qq.verified?'ok':'bad')+'" data-i18n="'+vKey+'">'+esc(t(vKey))+'</span>'+(openLink?'<div class="more">'+openLink+'</div>':'')+'</div></details>';
   }).join('');
   const links=[];
   const seen=new Set();
@@ -1262,20 +1345,26 @@ function addBot(d){
     seen.add(ch);
     const p0=chapNo(c.p0);
     const title=(c.title||'').replace(/^第\d+[章篇]?\s*/,'').slice(0,12);
-    links.push('<a href="/read?ch='+ch+(p0?'&p='+p0:'')+'" target="_blank" rel="noopener">'+(LANG==='en'?'Ch. ':'第')+ch+(LANG==='en'?' ':'章 ')+esc(title)+'</a>');
+    links.push('<a href="/read?ch='+ch+(p0?'&p='+p0:'')+'" data-ch="'+ch+'" data-title="'+esc(title)+'" target="_blank" rel="noopener">'+(LANG==='en'?'Ch. ':'第')+ch+(LANG==='en'?' ':'章 ')+esc(title)+'</a>');
   }
   const web=(d.web||[]).map(w=>{
     const href=safeHref(w.url);
     return '<div class="webitem" id="w-'+esc(w.n)+'">'+(href?'<a href="'+esc(href)+'" target="_blank" rel="noopener">'+esc(w.title||w.n)+'</a>':'<b>'+esc(w.title||w.n)+'</b>')+'<div>'+esc(w.snippet||'')+'</div></div>';
   }).join('');
-  const geoTxt=d.geo ? (LANG==='en'
-    ? d.geo.name+' · solar '+(d.geo.trueSolarOffsetMin>=0?'+':'')+d.geo.trueSolarOffsetMin+' min'
-    : d.geo.name+' · 真太阳时 '+(d.geo.trueSolarOffsetMin>=0?'+':'')+d.geo.trueSolarOffsetMin+' 分') : '';
-  const dailyHtml=(d.daily||dayPts.length) ? '<div class="dailybox"><div class="vt">'+esc(t('daily_tag'))+'</div>'+(d.daily?'<div>'+esc(d.daily)+'</div>':'')+pointBlock(dayPts,'')+'</div>' : '';
-  const follows=followUps(d.question||'').map(item=>'<button type="button" data-q="'+esc(item.q)+'">'+esc(item.label||t(item.k))+'</button>').join('');
+  const offNum=d.geo && Number.isFinite(Number(d.geo.trueSolarOffsetMin)) ? Number(d.geo.trueSolarOffsetMin) : null;
+  const geoTxt=offNum===null||!d.geo ? '' : (LANG==='en'
+    ? d.geo.name+' · solar '+(offNum>=0?'+':'')+offNum+' min'
+    : d.geo.name+' · 真太阳时 '+(offNum>=0?'+':'')+offNum+' 分');
+  const geoSpan=geoTxt?'<span data-gname="'+esc(d.geo.name)+'" data-goff="'+offNum+'"> · '+esc(geoTxt)+'</span>':'';
+  const dailyHtml=(d.daily||dayPts.length) ? '<div class="dailybox"><div class="vt" data-i18n="daily_tag">'+esc(t('daily_tag'))+'</div>'+(d.daily?'<div>'+esc(d.daily)+'</div>':'')+pointBlock(dayPts,'')+'</div>' : '';
+  const follows=followUps(d.question||'').map(item=>{
+    const label=item.city ? t('fu_city').replace('{city}', item.city) : t(item.k);
+    const mark=item.k ? ' data-i18n="'+esc(item.k)+'"' : (item.city ? ' data-city="'+esc(item.city)+'"' : '');
+    return '<button type="button" data-q="'+esc(item.q)+'"'+mark+'>'+esc(label)+'</button>';
+  }).join('');
   const citeN=(d.quotes||[]).filter(q=>q.verified).length;
   const tag=(LANG==='en'?'Passages ':'已核对 ')+citeN+(d.cached?(LANG==='en'?' · cached':' · 缓存'):'');
-  const node=el('<div class="msg bot"><div class="avatar">卦</div><div class="body"><div class="card"><div class="card-head"><span class="badge '+badgeCls(d.verdict)+'" data-v="'+esc(d.verdict||'')+'">'+esc(t('v_'+(d.verdict||''))||d.verdict||'—')+'</span><span class="tag">'+esc(tag)+'</span><span class="spacer"></span><button class="copybtn" type="button">'+esc(t('copy'))+'</button></div><div class="conclusion"><span class="q">「</span><span class="cw"></span><span class="q">」</span><span class="caret"></span></div><div class="card-rest">'+(d.sourceNote?'<div class="note">'+esc(d.sourceNote)+'</div>':'')+pointBlock(book,t('sec_book'))+pointBlock(weak,t('sec_weak'))+pointBlock(webPts,t('sec_web'))+(web?'<div class="quotes"><div class="quotes-title">'+esc(t('sec_web'))+'</div>'+web+'</div>':'')+(d.vision&&d.vision.ok?'<div class="visionbox"><div class="vt">'+esc(t('seen'))+'</div>'+esc(d.vision.text)+'</div>':'')+(d.vision&&!d.vision.ok?'<div class="missing"><b>'+esc(t('nosee'))+'</b>'+esc(d.vision.error||'')+'</div>':'')+(d.missing?'<div class="missing"><b>'+esc(t('miss'))+'</b>'+esc(d.missing)+'</div>':'')+dailyHtml+(quotes?'<div class="quotes"><div class="quotes-title">'+esc(t('quotes'))+'</div>'+quotes+'</div>':'')+(links.length>1?'<div class="more"><span class="lab">'+esc(t('more'))+'</span>'+links.slice(0,5).join('')+'</div>':'')+(follows?'<div class="quotes-title">'+esc(t('next'))+'</div><div class="follows">'+follows+'</div>':'')+'<div class="meta"><span>'+esc(shortModel(d.model))+(geoTxt?' · '+esc(geoTxt):'')+'</span><span class="sp"></span><button class="fb" type="button" data-vote="up">'+esc(t('useful'))+'</button><button class="fb down" type="button" data-vote="down">'+esc(t('useless'))+'</button><span>'+(d.elapsedMs||0)+' ms</span></div></div></div></div></div>');
+  const node=el('<div class="msg bot"><div class="avatar">卦</div><div class="body"><div class="card"><div class="card-head"><span class="badge '+badgeCls(d.verdict)+'" data-v="'+esc(d.verdict||'')+'">'+esc(t('v_'+(d.verdict||''))||d.verdict||'—')+'</span><span class="tag" data-cites="'+citeN+'" data-cached="'+(d.cached?'1':'0')+'">'+esc(tag)+'</span><span class="spacer"></span><button class="copybtn" type="button" data-i18n="copy">'+esc(t('copy'))+'</button></div><div class="conclusion"><span class="q">「</span><span class="cw"></span><span class="q">」</span><span class="caret"></span></div><div class="card-rest">'+(d.sourceNote?'<div class="note">'+esc(d.sourceNote)+'</div>':'')+pointBlock(book,'sec_book')+pointBlock(weak,'sec_weak')+pointBlock(webPts,'sec_web')+(web?'<div class="quotes"><div class="quotes-title" data-i18n="sec_web">'+esc(t('sec_web'))+'</div>'+web+'</div>':'')+(d.vision&&d.vision.ok?'<div class="visionbox"><div class="vt" data-i18n="seen">'+esc(t('seen'))+'</div>'+esc(d.vision.text)+'</div>':'')+(d.vision&&!d.vision.ok?'<div class="missing"><b data-i18n="nosee">'+esc(t('nosee'))+'</b>'+esc(d.vision.error||'')+'</div>':'')+(d.missing?'<div class="missing"><b data-i18n="miss">'+esc(t('miss'))+'</b>'+esc(d.missing)+'</div>':'')+dailyHtml+(quotes?'<div class="quotes"><div class="quotes-title" data-i18n="quotes">'+esc(t('quotes'))+'</div>'+quotes+'</div>':'')+(links.length>1?'<div class="more"><span class="lab" data-i18n="more">'+esc(t('more'))+'</span>'+links.slice(0,5).join('')+'</div>':'')+(follows?'<div class="quotes-title" data-i18n="next">'+esc(t('next'))+'</div><div class="follows">'+follows+'</div>':'')+'<div class="meta"><span>'+esc(shortModel(d.model))+'</span>'+geoSpan+'<span class="sp"></span><button class="fb" type="button" data-vote="up" data-i18n="useful">'+esc(t('useful'))+'</button><button class="fb down" type="button" data-vote="down" data-i18n="useless">'+esc(t('useless'))+'</button><span>'+(d.elapsedMs||0)+' ms</span></div></div></div></div></div>');
   const rest=node.querySelector('.card-rest');
   const showRest=()=>{ if(rest) rest.classList.add('in'); };
   const cw=node.querySelector('.cw');
@@ -1347,7 +1436,7 @@ async function ask(text, shown){
     hold=addTyping();
     const tip=hold.querySelector('.typing');
     if(imgToSend && tip) tip.textContent=t('typing_img');
-    fetch('/api/search?q='+encodeURIComponent(v)+'&topK=6')
+    fetch('/api/search?q='+encodeURIComponent(v)+'&topK=6&lang='+encodeURIComponent(LANG))
       .then(r=>r.ok?r.json():null)
       .then(d=>{
         if(gen!==askGen||!d||!tip||!hold.isConnected) return;
@@ -1385,7 +1474,7 @@ async function ask(text, shown){
     scrollBottom();
   }finally{
     if(gen!==askGen) return;
-    BUSY=false; send.disabled=false; send.classList.remove('loading'); send.textContent=LANG==='en'?'Ask':'问';
+    BUSY=false; send.disabled=false; send.classList.remove('loading'); send.textContent=t('send');
     if(gate.hidden) focusAsk();
   }
 }
@@ -1451,10 +1540,22 @@ function remember(qtext, label){
   renderRecent();
 }
 renderRecent();
-function fillGeoNote(d, how){
+function paintGeo(){
+  if(!geoState || !geoNote) return;
+  if(geoState.kind==='key'){ geoNote.textContent=t(geoState.key); return; }
+  const d=geoState.d;
   if(!d||!d.city){ geoNote.textContent=t('geo_miss'); return; }
   const off=d.geo&&Number.isFinite(Number(d.geo.trueSolarOffsetMin))?Number(d.geo.trueSolarOffsetMin):0;
-  geoNote.textContent=t(how==='gps'?'geo_gps':'geo_ip').replace('{city}', d.city).replace('{off}', (off>=0?'+':'')+off);
+  geoNote.textContent=t(geoState.how==='gps'?'geo_gps':'geo_ip').replace('{city}', d.city).replace('{off}', (off>=0?'+':'')+off);
+}
+function setGeoKey(key){
+  geoState={kind:'key', key:key};
+  paintGeo();
+}
+function fillGeoNote(d, how){
+  if(!d||!d.city){ setGeoKey('geo_miss'); return; }
+  geoState={kind:'data', d:d, how:how};
+  paintGeo();
   cityInput.value=d.city;
   try{
     localStorage.setItem('gxw_city', d.city);
@@ -1467,23 +1568,23 @@ async function detectIp(){
     const r=await fetch('/api/where');
     const d=await r.json();
     if(!cityInput.value.trim()||localStorage.getItem('gxw_city_src')==='ip') fillGeoNote(d,'ip');
-  }catch(err){ geoNote.textContent=t('geo_miss'); }
+  }catch(err){ setGeoKey('geo_miss'); }
 }
 document.getElementById('locBtn').addEventListener('click',()=>{
-  if(!navigator.geolocation){ geoNote.textContent=t('geo_no'); return; }
-  geoNote.textContent=t('geo_wait');
+  if(!navigator.geolocation){ setGeoKey('geo_no'); return; }
+  setGeoKey('geo_wait');
   navigator.geolocation.getCurrentPosition(async pos=>{
     try{
       const r=await fetch('/api/where?lat='+encodeURIComponent(pos.coords.latitude)+'&lon='+encodeURIComponent(pos.coords.longitude));
       fillGeoNote(await r.json(),'gps');
-    }catch(err){ geoNote.textContent=t('geo_miss'); }
-  },()=>{ geoNote.textContent=t('geo_deny'); },{enableHighAccuracy:false,timeout:8000,maximumAge:600000});
+    }catch(err){ setGeoKey('geo_miss'); }
+  },()=>{ setGeoKey('geo_deny'); },{enableHighAccuracy:false,timeout:8000,maximumAge:600000});
 });
 detectIp();
 document.getElementById('clearBtn').addEventListener('click',()=>{
   askGen++;
   if(askCtrl){ try{ askCtrl.abort(); }catch(err){} askCtrl=null; }
-  BUSY=false; send.disabled=false; send.classList.remove('loading'); send.textContent=LANG==='en'?'Ask':'问';
+  BUSY=false; send.disabled=false; send.classList.remove('loading'); send.textContent=t('send');
   const keep=chat.firstElementChild;
   chat.innerHTML='';
   if(keep) chat.appendChild(keep);
