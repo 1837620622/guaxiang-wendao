@@ -3,6 +3,10 @@ export interface Env {
   AI: Ai;
   ASSETS: Fetcher;
   CACHE?: KVNamespace;
+  /** 每分钟限流，wrangler.toml 里 [[unsafe.bindings]] type = "ratelimit" */
+  RL_ASK?: RateLimit;
+  RL_SEARCH?: RateLimit;
+  RL_FEEDBACK?: RateLimit;
   MODEL?: string;
   FALLBACK_MODEL?: string;
   BOOK_TITLE?: string;

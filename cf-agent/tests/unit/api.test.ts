@@ -2,6 +2,8 @@ import { test, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import worker from "../../src/index";
 import { runExternal } from "../../src/llm";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 const originalFetch = globalThis.fetch;
 afterEach(() => { globalThis.fetch = originalFetch; });
@@ -96,22 +98,64 @@ test("页面不再允许外部媒体（立绘是内联 SVG）", async () => {
   assert.doesNotMatch(csp, /cloudfront/);
 });
 
-/** KV 桩：每个键都返回一个很大的计数，相当于本分钟已经超限 */
+test("脚本只放行同源文件，不允许内联脚本", async () => {
+  const res = await worker.fetch(req("/"), env());
+  const csp = res.headers.get("Content-Security-Policy") || "";
+  const scriptSrc = csp.split(";").map((d) => d.trim()).find((d) => d.startsWith("script-src"));
+  assert.equal(scriptSrc, "script-src 'self'");
+});
+
+test("页面标记里没有内联脚本和内联事件属性，否则会被 CSP 拦下", () => {
+  for (const file of ["public/index.html", "public/read.html"]) {
+    const html = readFileSync(resolve(file), "utf8");
+    assert.doesNotMatch(html, /<script(?![^>]*\ssrc=)/i, file);
+    const markup = html.replace(/<script[\s\S]*?<\/script>/gi, "");
+    assert.doesNotMatch(markup, /<[a-z][^>]*\son[a-z]+\s*=/i, file);
+  }
+});
+
+/** KV 桩：每个键都返回一个很大的计数，相当于当天已经超限 */
 const fullKv = {
   get: async () => "999",
   put: async () => undefined,
 };
+/** 限流绑定桩：success 为 false 时相当于本分钟已经超限 */
+const limiter = (success: boolean) => ({ limit: async () => ({ success }) });
+const askPost = () =>
+  req("/api/ask", { method: "POST", headers: { "Content-Type": "application/json", Origin: ORIGIN }, body: "{}" });
 
-test("限流返回 429，并带 Retry-After 头和正文里的 retryAfter", async () => {
-  const res = await worker.fetch(
-    req("/api/ask", { method: "POST", headers: { "Content-Type": "application/json", Origin: ORIGIN }, body: "{}" }),
-    env({ CACHE: fullKv })
-  );
+test("每分钟超限返回 429，并带 Retry-After 头和正文里的 retryAfter", async () => {
+  const res = await worker.fetch(askPost(), env({ CACHE: fullKv, RL_ASK: limiter(false) }));
   assert.equal(res.status, 429);
   assert.equal(res.headers.get("Retry-After"), "60");
   const data = (await res.json()) as any;
   assert.equal(data.error, "too_many_requests_per_minute");
   assert.equal(data.retryAfter, 60);
+});
+
+test("每分钟没超、当天已超，返回 too_many_requests_per_day", async () => {
+  const res = await worker.fetch(askPost(), env({ CACHE: fullKv, RL_ASK: limiter(true) }));
+  assert.equal(res.status, 429);
+  assert.equal(((await res.json()) as any).error, "too_many_requests_per_day");
+});
+
+test("限流绑定出错时按失败关闭，不放行", async () => {
+  const broken = { limit: async () => { throw new Error("binding down"); } };
+  const res = await worker.fetch(askPost(), env({ CACHE: fullKv, RL_ASK: broken }));
+  assert.equal(res.status, 429);
+  assert.equal(((await res.json()) as any).error, "rate_limit_unavailable");
+});
+
+test("两道限额都没超才放行，并把当天计数加一（空问题在限流之后才校验）", async () => {
+  const puts: string[] = [];
+  const kv = {
+    get: async () => "3",
+    put: async (_key: string, value: string) => { puts.push(value); },
+  };
+  const res = await worker.fetch(askPost(), env({ CACHE: kv, RL_ASK: limiter(true) }));
+  assert.equal(res.status, 400);
+  assert.equal(((await res.json()) as any).error, "question_required");
+  assert.deepEqual(puts, ["4"]);
 });
 
 test("每个响应都带 X-Request-Id；合法的上游编号原样沿用", async () => {

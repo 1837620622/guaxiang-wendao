@@ -29,10 +29,30 @@ database_id = "0b26298a-40f9-4c1c-9d26-08685ca1dd5b"
 [ai]
 binding = "AI"
 
-# KV 答案缓存（省 AI 算力）
+# KV 答案缓存（省 AI 算力），同时存每日限额的计数
 [[kv_namespaces]]
 binding = "CACHE"
 id = "5126e810b03f4c279a61c02ea270e578"
+
+# 每分钟限流（Workers Rate Limiting）。三组独立计数，按 IP 统计、按数据中心分别生效。
+# namespace_id 只是这组计数的编号；同一账户里别和其他 Worker 的限流绑定撞号。
+[[unsafe.bindings]]
+name = "RL_ASK"
+type = "ratelimit"
+namespace_id = "260101"
+simple = { limit = 12, period = 60 }
+
+[[unsafe.bindings]]
+name = "RL_SEARCH"
+type = "ratelimit"
+namespace_id = "260102"
+simple = { limit = 30, period = 60 }
+
+[[unsafe.bindings]]
+name = "RL_FEEDBACK"
+type = "ratelimit"
+namespace_id = "260103"
+simple = { limit = 20, period = 60 }
 
 [vars]
 MODEL = "qwen/qwen3.8-27b"

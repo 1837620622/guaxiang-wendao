@@ -11,8 +11,8 @@ import { withTimeout } from "./util";
 
 const ALLOWED_MODELS = new Set(MODELS.map((m) => m.id));
 
-/** 限流：每 IP 每分钟 / 每天 */
-const RATE = { perMinute: 12, perDay: 60, searchPerMinute: 30 };
+/** 每 IP 每天的上限。每分钟的上限在 wrangler.toml 的 RL_* 限流绑定里配置。 */
+const RATE = { perDay: 60 };
 
 /** 一次问答的总预算（识图、检索、联网、所有兜底模型都算在内）。前端 110 秒后才放弃。 */
 const ASK_BUDGET_MS = 65000;
@@ -26,13 +26,14 @@ const SEC_HEADERS: Record<string, string> = {
 };
 
 /**
- * 页面与静态资源的安全头。页面是内联脚本和样式，所以 script/style 放行 'unsafe-inline'；
- * 外部只放行 Google 字体。首页立绘是内联 SVG，不加载任何媒体文件。
+ * 页面与静态资源的安全头。脚本全部是同源文件（app.js、read.js），不放行内联脚本；
+ * 样式还有内联 style 属性，所以 style 放行 'unsafe-inline'。外部只放行 Google 字体。
+ * 首页立绘是内联 SVG，不加载任何媒体文件。
  */
 const PAGE_HEADERS: Record<string, string> = {
   "Content-Security-Policy": [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline'",
+    "script-src 'self'",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob:",
@@ -103,26 +104,23 @@ async function hashKey(s: string): Promise<string> {
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 40);
 }
 
-/** 简单滑动窗口限流（KV 计数）。计数失败时拒绝，避免限额失效后被打满。 */
+/**
+ * 限流。每分钟由 Workers Rate Limiting 绑定计数：按数据中心分别统计，不经过 KV 的读改写，
+ * 同一地点的并发请求不会一起绕过限额。每天的总量仍用 KV 计数，最终一致，有少量竞争。
+ * 任何一步出错都拒绝，避免限额失效后被打满。
+ */
 async function rateLimit(env: Env, ip: string, kind: "ask" | "search" | "feedback"): Promise<{ ok: boolean; reason?: string }> {
-  if (!env.CACHE) return { ok: false, reason: "rate_limit_unavailable" };
-  const now = Date.now();
-  const minute = Math.floor(now / 60000);
-  const day = new Date(now + 8 * 3600 * 1000).toISOString().slice(0, 10);
-  const mKey = `rl:${kind}:m:${ip}:${minute}`;
+  const limiter = kind === "ask" ? env.RL_ASK : kind === "feedback" ? env.RL_FEEDBACK : env.RL_SEARCH;
+  if (!limiter || !env.CACHE) return { ok: false, reason: "rate_limit_unavailable" };
+  const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
   const dKey = `rl:${kind}:d:${ip}:${day}`;
+  const dlim = kind === "ask" ? RATE.perDay : kind === "feedback" ? 80 : RATE.perDay * 4;
   try {
-    const [mRaw, dRaw] = await Promise.all([env.CACHE.get(mKey), env.CACHE.get(dKey)]);
-    const mc = Number(mRaw || 0);
-    const dc = Number(dRaw || 0);
-    const lim = kind === "ask" ? RATE.perMinute : kind === "feedback" ? 20 : RATE.searchPerMinute;
-    const dlim = kind === "ask" ? RATE.perDay : kind === "feedback" ? 80 : RATE.perDay * 4;
-    if (mc >= lim) return { ok: false, reason: "too_many_requests_per_minute" };
+    const perMinute = await limiter.limit({ key: ip });
+    if (!perMinute.success) return { ok: false, reason: "too_many_requests_per_minute" };
+    const dc = Number((await env.CACHE.get(dKey)) || 0);
     if (dc >= dlim) return { ok: false, reason: "too_many_requests_per_day" };
-    await Promise.all([
-      env.CACHE.put(mKey, String(mc + 1), { expirationTtl: 120 }),
-      env.CACHE.put(dKey, String(dc + 1), { expirationTtl: 93600 }),
-    ]);
+    await env.CACHE.put(dKey, String(dc + 1), { expirationTtl: 93600 });
     return { ok: true };
   } catch (e) {
     console.error("rate limit failed", e);

@@ -284,6 +284,7 @@ def anchor_fractions():
 
 
 def write_into_index(path: Path):
+    """舞台和气泡锚点写进 index.html；头像 SVG 写进同目录的 app.js（页面脚本已外置，满足 CSP）。"""
     text = path.read_text(encoding="utf-8")
     ax, ay = anchor_fractions()
     text, n1 = re.subn(r"--ax: [0-9.]+;", f"--ax: {ax};", text)
@@ -292,11 +293,15 @@ def write_into_index(path: Path):
     start, end = "<!-- gx:stage:start -->", "<!-- gx:stage:end -->"
     a, b = text.index(start) + len(start), text.index(end)
     text = text[:a] + "\n" + stage_markup() + "\n" + text[b:]
-    js_start, js_end = "/* gx:avatar:start */", "/* gx:avatar:end */"
-    a, b = text.index(js_start) + len(js_start), text.index(js_end)
-    text = text[:a] + "\nconst GX_AVATAR = `" + avatar_markup() + "`;\n" + text[b:]
     path.write_text(text, encoding="utf-8")
-    print(f"wrote stage + avatar into {path}")
+
+    app = path.with_name("app.js")
+    js = app.read_text(encoding="utf-8")
+    js_start, js_end = "/* gx:avatar:start */", "/* gx:avatar:end */"
+    a, b = js.index(js_start) + len(js_start), js.index(js_end)
+    js = js[:a] + "\nconst GX_AVATAR = `" + avatar_markup() + "`;\n" + js[b:]
+    app.write_text(js, encoding="utf-8")
+    print(f"wrote stage into {path} and avatar into {app}")
 
 
 def png(out_path: str, scale: int = 12):

@@ -57,13 +57,15 @@
     │   └── types.ts
     ├── public/
     │   ├── index.html             # 问答页
+    │   ├── app.js                 # 问答页脚本（头像 SVG 由 make_master.py 写入）
     │   ├── read.html              # 原文阅读器
+    │   ├── read.js                # 阅读器脚本
     │   └── download/gaibian-jilu.pdf
     ├── scripts/build_chapters.py  # 生成 D1 导入 SQL
     ├── scripts/make_headline.py   # 首页像素标题（Unifont）→ SVG path
     ├── data/chapters.sql          # 3.6MB
     ├── tests/unit/                # 单元测试：校验、地理、联网、路由守卫（npm test）
-    ├── tests/test_api.py          # 端到端测试（打已部署站点）
+    ├── tests/test_api.py          # 接口测试：契约断言（可对本地跑）+ 质量指标（打已部署站点）
     └── import.sh
 ```
 
@@ -154,7 +156,7 @@
 | 图片识别 | 7d |
 | health | 5min |
 
-限流（按 IP）：问答 12 次/分、60 次/天；搜索 30 次/分。
+限流（按 IP）：问答 12 次/分、60 次/天；搜索 30 次/分；反馈 20 次/分、80 次/天。每分钟由 Workers Rate Limiting 绑定计数（`wrangler.toml` 里的 `RL_ASK` / `RL_SEARCH` / `RL_FEEDBACK`，按数据中心分别统计，不经过 KV 读改写）；每天的总量仍由 KV 计数，最终一致。
 
 ### API
 
@@ -197,7 +199,7 @@
 ## 四、安全
 
 - 写接口（`/api/ask`、`/api/vision`、`/api/feedback`）只接受 `application/json` 且 Origin 与本站一致的请求，跨站页面发不出这种请求。
-- 页面带 CSP：脚本与样式只允许内联与同源，字体只放行 Google Fonts，视频只放行 CDN 域名；另有 `nosniff`、`Referrer-Policy: no-referrer`、`X-Frame-Options`。
+- 页面带 CSP：脚本只允许同源（页面脚本在 `app.js`、`read.js`，不允许内联脚本）；样式允许内联（页面有内联 style）；字体只放行 Google Fonts；不加载外部媒体（`media-src 'none'`）。另有 `nosniff`、`Referrer-Policy: no-referrer`、`X-Frame-Options`。
 - 模型原始输出（可能含思维链）只写日志，不回传前端。
 - 联网结果只保留 http(s) 链接，不跟随搜索结果里的外链。
 
@@ -205,7 +207,8 @@
 
 ```bash
 npm test            # 类型检查 + 单元测试（不联网）
-python3 tests/test_api.py https://<部署地址>   # 端到端：检索质量 / AI 忠实度 / 模型可用性
+python3 tests/test_api.py http://127.0.0.1:8787 contract   # 接口契约：状态码、拒绝规则、安全头；不调用大模型，失败退出码为 1
+python3 tests/test_api.py https://<部署地址> quality       # 检索命中 / AI 忠实度 / 模型可用性（依赖线上数据和模型密钥）
 ```
 
 首页标题的像素字形由 `scripts/make_headline.py` 生成（Unifont 16×16 点阵，需要本机有该字体）。
