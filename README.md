@@ -7,6 +7,7 @@
 - **问答**：https://chuankangkk.top
 - **读原文**：https://chuankangkk.top/read
 - **PDF**：https://chuankangkk.top/download/gaibian-jilu.pdf
+- **姊妹站**：玄机子（算命）https://diviner.chuankangkk.top/ —— 首页与原文阅读页都有入口互相链接
 - 备用（workers.dev）：https://guaxiang-wendao.ck-nb.workers.dev
 
 ---
