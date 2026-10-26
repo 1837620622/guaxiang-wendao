@@ -172,6 +172,8 @@
 | POST | `/api/feedback` | `{question, verdict, vote}` |
 | GET | `/api/stats` | 反馈统计 |
 | GET | `/api/health` | 库状态 |
+| GET | `/api/websearch?q=` | 联网检索（每 IP 限流，q 最多 80 字） |
+| GET | `/api/where` | 城市与校方位偏差；可带 `lat`、`lon`，不回传 IP、不落库 |
 
 ---
 

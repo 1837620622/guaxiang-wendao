@@ -3,6 +3,8 @@
  * 主模型 llama-3.2-11b-vision，兜底 llava-1.5-7b
  */
 
+import { withTimeout } from "./util";
+
 export interface VisionResult {
   ok: boolean;
   text: string;
@@ -71,7 +73,8 @@ function looksLikeFloorPlan(hint: string): boolean {
 export async function analyzeImage(
   env: any,
   bytes: Uint8Array,
-  userHint = ""
+  userHint = "",
+  timeoutMs = 45000
 ): Promise<VisionResult> {
   const t0 = Date.now();
 
@@ -98,15 +101,16 @@ export async function analyzeImage(
   let lastErr = "";
   for (const model of VISION_MODELS) {
     try {
-      const out: any = await Promise.race([
+      const out: any = await withTimeout(
         env.AI.run(model, {
           image: Array.from(bytes),
           prompt,
           max_tokens: 700,
           temperature: 0.2,
         }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error("vision_timeout")), 45000)),
-      ]);
+        timeoutMs,
+        "vision_timeout"
+      );
       const text =
         out?.response ??
         out?.result?.response ??
