@@ -7,7 +7,7 @@ import { resolveLocation, findLocationInText, listCities, geoPromptBlock, neares
 import { webSearch, webPromptBlock, type WebResult } from "./websearch";
 import { analyzeImage, base64ToBytes, imageKind, visionPromptBlock, MAX_BYTES, type VisionResult } from "./vision";
 import { extractJSON, verifyQuote, cleanText, clip, pointTouchesSource, scrubFakeChapter, searchText, polishProse, breakSentences } from "./verify";
-import { withTimeout } from "./util";
+import { withTimeout, toNumberParam } from "./util";
 
 const ALLOWED_MODELS = new Set(MODELS.map((m) => m.id));
 
@@ -281,10 +281,8 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
   }
 
   let topK = 6;
-  if (body?.topK !== undefined) {
-    const n = Number(body.topK);
-    if (Number.isFinite(n)) topK = Math.min(Math.max(Math.trunc(n), 3), 10);
-  }
+  const topKRaw = toNumberParam(body?.topK);
+  if (Number.isFinite(topKRaw)) topK = Math.min(Math.max(Math.trunc(topKRaw), 3), 10);
 
   // 图片
   let vision: VisionResult | null = null;
@@ -321,7 +319,7 @@ async function handleAsk(request: Request, env: Env, ip: string): Promise<Respon
   // 地理位置：显式传参优先，其次从问题文本里找城市名
   const explicitLoc = typeof body?.location === "string" ? body.location.trim().slice(0, 40) : "";
   const geo = explicitLoc ? resolveLocation(explicitLoc) : findLocationInText(question);
-  const facingRaw = Number(body?.facing);
+  const facingRaw = toNumberParam(body?.facing);
   const facing = Number.isFinite(facingRaw) && facingRaw >= 0 && facingRaw < 360 ? Math.round(facingRaw) : null;
 
   // 模型白名单
@@ -677,7 +675,7 @@ async function handleSearch(request: Request, env: Env, ip: string): Promise<Res
   const rl = await rateLimit(env, ip, "search");
   if (!rl.ok) return tooMany(rl.reason);
 
-  const nRaw = Number(url.searchParams.get("topK"));
+  const nRaw = toNumberParam(url.searchParams.get("topK"));
   const topK = Number.isFinite(nRaw) ? Math.min(Math.max(Math.trunc(nRaw), 1), 8) : 5;
 
   let hits: SearchHit[];
