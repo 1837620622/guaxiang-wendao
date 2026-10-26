@@ -8,3 +8,13 @@ export function withTimeout<T>(p: Promise<T>, ms: number, code: string): Promise
   });
   return Promise.race([p, limit]).finally(() => clearTimeout(timer));
 }
+
+/**
+ * 请求参数转数字。缺省、null、空串与空白一律得到 NaN；不能直接用 Number()，
+ * 因为 Number(null) 与 Number("") 都是 0，会把「没传」变成一个真实的取值。
+ */
+export function toNumberParam(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "string" && v.trim() !== "") return Number(v);
+  return NaN;
+}
