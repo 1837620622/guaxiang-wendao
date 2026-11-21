@@ -7,7 +7,6 @@ workers_dev = true
 routes = [
   { pattern = "guaxiang-wendao.chuankangkk.top", custom_domain = true },
   { pattern = "chuankangkk.top/*", zone_name = "chuankangkk.top" },
-  { pattern = "www.chuankangkk.top/*", zone_name = "chuankangkk.top" },
 ]
 
 
