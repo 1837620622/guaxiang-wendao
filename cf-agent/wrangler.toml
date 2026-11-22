@@ -6,7 +6,7 @@ workers_dev = true
 # 子域用 Custom Domain 自动建 DNS；主域继续走已有路由
 routes = [
   { pattern = "guaxiang-wendao.chuankangkk.top", custom_domain = true },
-  { pattern = "chuankangkk.top/*", zone_name = "chuankangkk.top" },
+  { pattern = "guaxiang.chuankangkk.top", custom_domain = true },
 ]
 
 
